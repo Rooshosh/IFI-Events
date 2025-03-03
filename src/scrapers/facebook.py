@@ -360,6 +360,21 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error creating Event object: {e}")
             return None
     
+    def configure(self, config: Dict[str, Any]) -> None:
+        """Configure scraper settings from dictionary."""
+        if config is None:
+            return
+            
+        # Update configurable parameters
+        if 'days_to_fetch' in config:
+            self.days_to_fetch = config['days_to_fetch']
+        if 'initial_wait' in config:
+            self.initial_wait = config['initial_wait']
+        if 'poll_interval' in config:
+            self.poll_interval = config['poll_interval']
+        if 'max_attempts' in config:
+            self.max_poll_attempts = config['max_attempts']
+    
     def get_events(self, snapshot_id: str = None) -> List[Event]:
         """
         Get events from Facebook group posts.
@@ -368,6 +383,7 @@ class FacebookGroupScraper(BaseScraper):
             snapshot_id: Optional snapshot ID to fetch from directly
         """
         try:
+            logger.info(f"Fetching Facebook posts for the last {self.days_to_fetch} days")
             # Fetch posts (using cache if available)
             posts_json = self._fetch_posts(
                 url=self.base_url + "/trigger",
