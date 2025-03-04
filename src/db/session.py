@@ -14,8 +14,16 @@ DB_PATH = Path(__file__).parent.parent.parent / 'events.db'
 
 def get_db_url():
     """Get database URL based on environment."""
-    is_testing = os.environ.get('TESTING') == 'true'
-    return "sqlite:///:memory:" if is_testing else f"sqlite:///{DB_PATH}"
+    # Check if we're in test environment
+    if os.environ.get('TESTING') == 'true':
+        return "sqlite:///:memory:"
+    
+    # Check if we're using PostgreSQL (Docker environment)
+    if os.environ.get('DATABASE_URL'):
+        return os.environ['DATABASE_URL']
+    
+    # Default to SQLite for local development
+    return f"sqlite:///{DB_PATH}"
 
 class DatabaseManager:
     """Manages database connections and sessions."""
@@ -37,14 +45,21 @@ class DatabaseManager:
     def setup_engine(self):
         """Set up SQLAlchemy engine."""
         if not self.engine:
-            self.engine = create_engine(
-                get_db_url(),
-                echo=False,
-                connect_args={
+            db_url = get_db_url()
+            connect_args = {}
+            
+            # Add SQLite-specific arguments if using SQLite
+            if db_url.startswith('sqlite'):
+                connect_args = {
                     "check_same_thread": False,
                     "detect_types": 3
-                },
-                poolclass=StaticPool
+                }
+            
+            self.engine = create_engine(
+                db_url,
+                echo=False,
+                connect_args=connect_args,
+                poolclass=StaticPool if db_url.startswith('sqlite') else None
             )
             self.session_factory.configure(bind=self.engine)
     
