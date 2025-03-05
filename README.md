@@ -4,6 +4,8 @@
 
 A Python application that aggregates and displays events from various UiO IFI (Department of Informatics) sources.
 
+[📋 Project Management Board](https://leaf-brazil-6c0.notion.site/1a188d83e8eb80b7bd63fa440a92cd48?v=1a188d83e8eb8106b59c000c65789543&pvs=4)
+
 ## Features
 
 - Event scraping from multiple sources:

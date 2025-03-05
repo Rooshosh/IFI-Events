@@ -267,9 +267,7 @@ def fetch_events(
                 if isinstance(scraper, FacebookGroupScraper):
                     # Configure Facebook scraper if settings provided
                     if facebook_config:
-                        scraper.initial_wait = facebook_config.get('initial_wait', scraper.initial_wait)
-                        scraper.poll_interval = facebook_config.get('poll_interval', scraper.poll_interval)
-                        scraper.max_poll_attempts = facebook_config.get('max_attempts', scraper.max_poll_attempts)
+                        scraper.configure(facebook_config)
                     events = scraper.get_events(snapshot_id=snapshot_id)
                 else:
                     events = scraper.get_events()
@@ -463,6 +461,8 @@ def main():
                             help='Use an existing snapshot ID for Facebook scraper')
     fetch_parser.add_argument('--debug', action='store_true',
                             help='Show debug information')
+    fetch_parser.add_argument('--days', type=int,
+                            help='Number of days to fetch (Facebook only)')
     
     list_parser = subparsers.add_parser('list', help='List events from database')
     list_parser.add_argument('source', choices=list(VALID_SOURCES.keys()),
@@ -595,6 +595,9 @@ def main():
                     'poll_interval': 30,
                     'max_attempts': 20
                 }
+                # Add days_to_fetch if specified
+                if args.days is not None:
+                    facebook_config['days_to_fetch'] = args.days
             
             for source in sources:
                 fetch_events(
