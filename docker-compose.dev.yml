@@ -2,7 +2,7 @@ services:
   data-service:
     build:
       context: .
-      dockerfile: docker/data-service/Dockerfile
+      dockerfile: docker/data-service/Dockerfile.dev
     environment:
       - DATABASE_URL=postgresql://dev_user:dev_pass@db:5432/events
       - FLASK_ENV=development

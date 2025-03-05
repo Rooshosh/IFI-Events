@@ -1,6 +1,6 @@
 from flask import Flask, render_template
 from ..db import db_manager
-from .routes import events_bp, api_bp
+from .routes import events_bp, api_bp, health  # Add health import
 from .routes.webhook import webhook_bp
 from dotenv import load_dotenv
 import os
@@ -23,6 +23,7 @@ db_manager.init_db()  # Create tables if they don't exist
 app.register_blueprint(events_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(webhook_bp)
+app.register_blueprint(health.bp)  # Register health blueprint
 
 # Error handlers
 @app.errorhandler(404)

@@ -5,6 +5,10 @@
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -21,8 +25,13 @@ def migrate_data():
     sqlite_engine = create_engine(sqlite_url)
 
     # PostgreSQL connection (destination)
-    pg_url = os.environ.get('DATABASE_URL', 'postgresql://dev_user:dev_pass@localhost:5432/events')
-    pg_engine = create_engine(pg_url)
+    if not os.environ.get('DATABASE_URL'):
+        raise ValueError("DATABASE_URL environment variable is required")
+    pg_url = os.environ['DATABASE_URL']
+    pg_engine = create_engine(
+        pg_url,
+        connect_args={'sslmode': 'require'}
+    )
 
     # Create tables in PostgreSQL if they don't exist
     Base.metadata.create_all(pg_engine)
