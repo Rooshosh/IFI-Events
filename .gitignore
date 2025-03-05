@@ -15,10 +15,7 @@ data/cache/
 logs/
 .coverage
 
-# Replit specific
-.replit
-replit.nix
-.config/
+# Cache and temporary files
 .upm/
 .cache/
 
