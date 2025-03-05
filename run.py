@@ -37,7 +37,11 @@ if __name__ == '__main__':
         # Use 0.0.0.0 if running in Replit, localhost otherwise
         host = '0.0.0.0' if os.environ.get('REPL_ID') else 'localhost'
         app.run(
+<<<<<<< HEAD
             host=host,
+=======
+            host='0.0.0.0',  # Use 0.0.0.0 to make it accessible in Replit webview
+>>>>>>> 569bbee (Assistant checkpoint: Updated port binding for Replit webview compatibility)
             port=port,
             debug=True
         )
