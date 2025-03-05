@@ -1,5 +1,6 @@
 import os
 from src.web import app
+import sys
 
 if __name__ == '__main__':
     """
@@ -11,23 +12,54 @@ if __name__ == '__main__':
             * Interactive debugger
             * Auto-reload on code changes
         - Uses localhost (127.0.0.1) by default
-        Example: FLASK_ENV=development flask run --port=5001
+        Example: FLASK_ENV=development python run.py
     
     Production:
-        - Never enable debug mode
-        - Use a production WSGI server (e.g., Gunicorn, uWSGI)
+        - Uses Gunicorn WSGI server
         - Set FLASK_ENV=production or don't set it at all
         - Uses 0.0.0.0 to accept external connections
-        - Remove or disable test routes (like test-500)
-        Example: gunicorn 'src.web:app'
+        - Production-ready error handling
+        Example: FLASK_ENV=production python run.py
         
-    Note: The current setup is intended for development. 
-    For production deployment, additional security measures should be implemented.
+    Note: For production deployment, additional security measures should be implemented.
     """
-    # Set configuration based on environment variables
-    debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    host = 'localhost' if debug_mode else '0.0.0.0'
+    env = os.environ.get('FLASK_ENV', 'production')
     port = int(os.environ.get('PORT', 5001))
     
-    # Run the app
-    app.run(host=host, debug=debug_mode, port=port) 
+    if env == 'development':
+        # Development mode - use Flask's built-in server
+        app.run(
+            host='localhost',
+            port=port,
+            debug=True
+        )
+    else:
+        # Production mode - use Gunicorn
+        try:
+            from gunicorn.app.base import BaseApplication
+
+            class GunicornApp(BaseApplication):
+                def __init__(self, app, options=None):
+                    self.options = options or {}
+                    self.application = app
+                    super().__init__()
+
+                def load_config(self):
+                    for key, value in self.options.items():
+                        self.cfg.set(key.lower(), value)
+
+                def load(self):
+                    return self.application
+
+            options = {
+                'bind': f'0.0.0.0:{port}',
+                'workers': os.environ.get('GUNICORN_WORKERS', '2'),
+                'worker_class': 'sync',
+                'timeout': 120
+            }
+            
+            GunicornApp(app, options).run()
+        except ImportError:
+            print("Error: Gunicorn is required for production mode.")
+            print("Please install it with: pip install gunicorn")
+            sys.exit(1) 
