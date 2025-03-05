@@ -4,15 +4,21 @@ import sys
 
 if __name__ == '__main__':
     """
-    Development vs Production Configuration:
+    Environment Configuration:
     
-    Development:
+    Development (Local):
         - Set FLASK_ENV=development to enable:
             * Debug mode with detailed error pages
             * Interactive debugger
             * Auto-reload on code changes
         - Uses localhost (127.0.0.1) by default
         Example: FLASK_ENV=development python run.py
+    
+    Development (Replit):
+        - Set FLASK_ENV=development
+        - Uses 0.0.0.0 to make it accessible in Replit webview
+        - Debug mode enabled
+        Example: In .replit file: run = "FLASK_ENV=development python run.py"
     
     Production:
         - Uses Gunicorn WSGI server
@@ -28,8 +34,10 @@ if __name__ == '__main__':
     
     if env == 'development':
         # Development mode - use Flask's built-in server
+        # Use 0.0.0.0 if running in Replit, localhost otherwise
+        host = '0.0.0.0' if os.environ.get('REPL_ID') else 'localhost'
         app.run(
-            host='localhost',
+            host=host,
             port=port,
             debug=True
         )
