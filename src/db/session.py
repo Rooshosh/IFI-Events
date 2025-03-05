@@ -18,12 +18,15 @@ def get_db_url():
     if os.environ.get('TESTING') == 'true':
         return "sqlite:///:memory:"
     
-    # Check if we're using PostgreSQL (Docker environment)
-    if os.environ.get('DATABASE_URL'):
-        return os.environ['DATABASE_URL']
+    # Check if we're in development mode
+    if os.environ.get('FLASK_ENV') == 'development':
+        # Use SQLite for development
+        return f"sqlite:///{DB_PATH}"
     
-    # Default to SQLite for local development
-    return f"sqlite:///{DB_PATH}"
+    # Production mode - use PostgreSQL
+    if not os.environ.get('DATABASE_URL'):
+        raise ValueError("DATABASE_URL environment variable is required for production mode")
+    return os.environ['DATABASE_URL']
 
 class DatabaseManager:
     """Manages database connections and sessions."""
