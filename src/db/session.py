@@ -66,11 +66,11 @@ class DatabaseManager:
             pool_args = {}
             if not db_url.startswith('sqlite'):
                 pool_args = {
-                    'pool_size': 5,  # Limit pool size
-                    'max_overflow': 10,  # Allow some overflow
-                    'pool_timeout': 30,  # Timeout for getting connection from pool
-                    'pool_recycle': 1800,  # Recycle connections after 30 minutes
-                    'pool_pre_ping': True  # Verify connection before using
+                    'pool_size': 2,  # Reduce pool size
+                    'max_overflow': 5,  # Reduce overflow
+                    'pool_timeout': 30,
+                    'pool_recycle': 1800,
+                    'pool_pre_ping': True
                 }
             
             self.engine = create_engine(
@@ -84,11 +84,15 @@ class DatabaseManager:
     
     def init_db(self):
         """Initialize database, creating all tables."""
-        self.setup_engine()
+        if not self.engine:
+            self.setup_engine()
         # Import models to ensure they're registered
         from ..models.event import Event  # noqa
         from ..models.raw_scrape_data import RawScrapeData  # noqa
-        Base.metadata.create_all(self.engine)
+        
+        # Use a single connection for table creation
+        with self.engine.connect() as conn:
+            Base.metadata.create_all(conn)
     
     @contextmanager
     def session(self):

@@ -34,7 +34,13 @@ app = FastAPI(
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    """Initialize database only once during startup."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {str(e)}")
+        # Don't raise the exception - allow the app to start even if DB init fails
+        # The first request will retry the initialization
 
 # Enable CORS with environment-specific settings
 app.add_middleware(
