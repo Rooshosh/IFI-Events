@@ -20,6 +20,7 @@ from src.db.session import get_db
 from src.models.event import Event
 from src.models.raw_scrape_data import RawScrapeData
 from src.utils.timezone import now_oslo
+from src.new_event_handler import NewEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -185,13 +186,16 @@ async def handle_brightdata_facebook_group_webhook(
         # Process the data
         events = process_facebook_data(data)
         
-        # TODO: Store processed events in database
-        # This should be handled by the NewEventHandler
+        # Store processed events using NewEventHandler
+        handler = NewEventHandler(skip_merging=True)  # Skip merging for now
+        new_count, updated_count = handler.process_new_events(events, "Facebook (IFI-studenter)")
         
         return {
             "status": "success",
             "message": "Data received, stored, and processed",
             "events_processed": len(events),
+            "new_events": new_count,
+            "updated_events": updated_count,
             "raw_data_id": raw_data.id if 'raw_data' in locals() else None
         }
         

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Script to fetch and store new events from all configured sources."""
+"""Script to fetch and store new events from various sources."""
 
 import logging
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.source_manager import SourceManager
-from src.handlers.new_event_handler import NewEventHandler
+from src.new_event_handler import NewEventHandler
 
 # Set up logging
 logging.basicConfig(

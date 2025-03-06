@@ -4,9 +4,9 @@ import logging
 from typing import List, Optional, Tuple
 from datetime import datetime
 
-from ..models.event import Event
-from ..db.session import DatabaseManager
-from ..utils.deduplication import (
+from .models.event import Event
+from .db.session import DatabaseManager
+from .utils.deduplication import (
     check_duplicate_before_insert,
     DuplicateConfig,
     merge_events,
