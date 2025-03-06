@@ -70,6 +70,7 @@ def simulate_webhook(snapshot_id: str):
         # Send to webhook
         logger.info("Sending data to webhook...")
         response = requests.post(
+            # TODO: only works on localhost
             "http://localhost:8000/webhook/brightdata/results",
             json=data,
             headers={
