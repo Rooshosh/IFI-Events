@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from ..db.session import db_manager, init_db
 from ..models.event import Event
