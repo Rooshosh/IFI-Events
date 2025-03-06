@@ -75,6 +75,7 @@ class DatabaseManager:
         self.setup_engine()
         # Import models to ensure they're registered
         from ..models.event import Event  # noqa
+        from ..models.raw_scrape_data import RawScrapeData  # noqa
         Base.metadata.create_all(self.engine)
     
     @contextmanager

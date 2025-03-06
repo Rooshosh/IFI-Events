@@ -1,42 +1,34 @@
 """Scraper for Facebook group posts using BrightData's API."""
 
-# TODO: Fix after system refactor in similar way to Peoply and Navet
-
-from datetime import datetime, timedelta
 import logging
-import time
 from typing import List, Optional, Dict, Any
 import requests
-import json
 import os
-from .base import BaseScraper
-from ..models.event import Event
-from ..utils.timezone import now_oslo, ensure_oslo_timezone
-from ..config.sources import SOURCES
-from ..utils.llm import init_openai, is_event_post, parse_event_details
-from ..db import get_db
-from sqlalchemy import func
+import sys
+from pathlib import Path
+from datetime import datetime, timedelta
+
+# Add src to Python path when running directly
+if __name__ == "__main__":
+    sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from src.scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
-
-# Default OpenAI configuration for event parsing
-# These settings are optimized for:
-# - Consistent outputs (low temperature)
-# - Sufficient context (1000 tokens)
-# - Cost-effective model choice
-DEFAULT_OPENAI_CONFIG = {
-    'api_key': os.getenv('OPENAI_API_KEY'),
-    'model': 'gpt-4-mini',
-    'temperature': 0.3,  # Lower temperature for more consistent outputs
-    'max_tokens': 1000
-}
 
 # Default BrightData configuration
 DEFAULT_BRIGHTDATA_CONFIG = {
     'api_key': os.getenv('BRIGHTDATA_API_KEY'),
     'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
     'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'days_to_fetch': 1  # Default to fetching just today's posts
+    'days_to_fetch': 1,  # Default to fetching just today's posts
+    'num_of_posts': 20,  # Safety limit on number of posts to fetch
+    'webhook_base_url': 'https://9219-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
+    'webhook_endpoint': '/webhook/brightdata/results',
+    'webhook_auth': os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER'),
+    'webhook_format': 'json',
+    'webhook_uncompressed': True,
+    'include_errors': True
 }
 
 class FacebookGroupScraper(BaseScraper):
@@ -45,40 +37,55 @@ class FacebookGroupScraper(BaseScraper):
     
     This scraper:
     1. Uses BrightData's 'Facebook - Posts by group URL' dataset to fetch posts
-    2. Uses OpenAI's API to identify and parse events from these posts
-    3. Converts parsed posts into Event objects
+    2. Sends results to a configured webhook for processing
     
     Configuration:
         brightdata: API configuration for BrightData
-            - api_key: Your BrightData API key
+            - api_key: Your BrightData API key (required)
             - dataset_id: The dataset ID to use
             - group_url: URL of the Facebook group to scrape
-            - days_to_fetch: How many days of posts to fetch
-            
-        openai: API configuration for OpenAI
-            - api_key: Your OpenAI API key
-            - model: Model to use (default: gpt-4-mini)
-            - temperature: Sampling temperature (default: 0.3)
-            - max_tokens: Maximum tokens to generate (default: 1000)
+            - days_to_fetch: How many days of posts to fetch (default: 1)
+            - num_of_posts: Maximum number of posts to fetch (default: 20)
+            - webhook_base_url: Base URL for webhooks (update when ngrok changes)
+            - webhook_endpoint: Webhook endpoint path
+            - webhook_auth: Authorization header for webhook
+            - webhook_format: Format of webhook data (default: json)
+            - webhook_uncompressed: Whether to send uncompressed data (default: true)
+            - include_errors: Whether to include errors in response (default: true)
     """
     
-    def __init__(self, brightdata_config: Dict[str, Any] = None, openai_config: Dict[str, Any] = None):
+    def __init__(self, brightdata_config: Dict[str, Any] = None):
         """
         Initialize the scraper with optional configuration overrides.
         
         Args:
             brightdata_config: Override default BrightData settings
-            openai_config: Override default OpenAI settings
+            
+        Raises:
+            ValueError: If required environment variables or configuration values are missing or invalid
         """
         # Initialize BrightData configuration
         self.brightdata_config = DEFAULT_BRIGHTDATA_CONFIG.copy()
         if brightdata_config:
             self.brightdata_config.update(brightdata_config)
-            
-        # Initialize OpenAI configuration
-        self.openai_config = DEFAULT_OPENAI_CONFIG.copy()
-        if openai_config:
-            self.openai_config.update(openai_config)
+        
+        # Validate required environment variables
+        if not self.brightdata_config['api_key']:
+            raise ValueError("BRIGHTDATA_API_KEY environment variable is required")
+        if not self.brightdata_config['webhook_auth']:
+            raise ValueError("BRIGHTDATA_AUTHORIZATION_HEADER environment variable is required")
+        
+        # Validate configuration values
+        if not self.brightdata_config['group_url']:
+            raise ValueError("group_url is required")
+        if not self.brightdata_config['webhook_base_url']:
+            raise ValueError("webhook_base_url is required")
+        if not self.brightdata_config['webhook_endpoint']:
+            raise ValueError("webhook_endpoint is required")
+        if self.brightdata_config['days_to_fetch'] < 1:
+            raise ValueError("days_to_fetch must be at least 1")
+        if self.brightdata_config['num_of_posts'] < 1:
+            raise ValueError("num_of_posts must be at least 1")
         
         # Set up BrightData API parameters
         self.base_url = "https://api.brightdata.com/datasets/v3"
@@ -86,319 +93,116 @@ class FacebookGroupScraper(BaseScraper):
             "Authorization": f"Bearer {self.brightdata_config['api_key']}",
             "Content-Type": "application/json",
         }
-        self.params = {
-            "dataset_id": self.brightdata_config['dataset_id'],
-            "include_errors": "true",
-        }
         self.group_url = self.brightdata_config['group_url']
-        self.days_to_fetch = self.brightdata_config['days_to_fetch']
-        
-        # Configure scraping parameters
-        self.max_poll_attempts = 60  # Up to 1 hour total (60 attempts)
-        self.poll_interval = 60  # seconds (1 minute)
-        self.initial_wait = 90  # seconds
-        
-        # Initialize OpenAI client
-        init_openai(self.openai_config['api_key'])
     
     def name(self) -> str:
         """Return the name of the scraper"""
         return "Facebook (IFI-studenter)"
     
-    def _extract_post_id(self, url: str) -> Optional[str]:
-        """Extract the post ID from a Facebook post URL."""
-        if not url:
-            return None
-        try:
-            return url.split('/posts/')[-1].strip('/')
-        except Exception:
-            logger.warning(f"Could not extract post ID from URL: {url}")
-            return None
-
-    def _get_event_urls_for_timeframe(self, num_days: int = 1) -> List[str]:
-        """
-        Get source URLs of events from the last N days.
-        
-        Args:
-            num_days: Number of days to look back (default: 1 for today only)
-        """
-        db = get_db()
-        try:
-            # Get date range in Oslo timezone
-            end_date = now_oslo().date()
-            start_date = end_date - timedelta(days=num_days - 1)
-            
-            # Query for events in date range
-            events = db.query(Event).filter(
-                Event.source_name == self.name(),
-                Event.created_at >= start_date
-            ).all()
-            
-            return [event.source_url for event in events if event.source_url]
-        finally:
-            db.close()
-
-    def _trigger_scrape(self) -> Optional[str]:
+    def _trigger_scrape(self) -> bool:
         """
         Trigger a new scrape of the Facebook group.
         
         Returns:
-            snapshot_id if successful, None otherwise.
+            bool: True if successful, False otherwise.
         """
         try:
-            # Get existing event URLs to avoid re-scraping
-            existing_urls = self._get_event_urls_for_timeframe(self.days_to_fetch)
-            logger.info(f"Found {len(existing_urls)} existing events in the last {self.days_to_fetch} days")
+            # Calculate date range based on days_to_fetch
+            # For days_to_fetch=1, both dates will be today
+            # For days_to_fetch=2, end_date=today, start_date=yesterday
+            # And so on...
+            end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            start_date = end_date - timedelta(days=self.brightdata_config['days_to_fetch'] - 1)  # -1 because we want to include today
+            
+            # Format dates for BrightData API (YYYY-MM-DD)
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
             
             # Prepare request data
-            data = {
+            data = [{
                 "url": self.group_url,
-                "posts_limit": 50,  # Fetch up to 50 posts
-                "days_limit": self.days_to_fetch,  # Only fetch posts from last N days
+                "start_date": start_date_str,
+                "end_date": end_date_str,
+                "num_of_posts": self.brightdata_config['num_of_posts']
+            }]
+            
+            logger.info(f"Scraping up to {self.brightdata_config['num_of_posts']} posts from {start_date_str} to {end_date_str}")
+            
+            # Prepare request parameters
+            params = {
+                "dataset_id": self.brightdata_config['dataset_id'],
+                "include_errors": str(self.brightdata_config['include_errors']).lower(),
             }
+            
+            # Add webhook configuration
+            webhook_url = f"{self.brightdata_config['webhook_base_url']}{self.brightdata_config['webhook_endpoint']}"
+            params.update({
+                "endpoint": webhook_url,
+                "auth_header": self.brightdata_config['webhook_auth'],
+                "format": self.brightdata_config['webhook_format'],
+                "uncompressed_webhook": str(self.brightdata_config['webhook_uncompressed']).lower(),
+            })
+            logger.info(f"Webhook configured to send results to: {webhook_url}")
             
             # Make the request
             response = requests.post(
                 f"{self.base_url}/trigger",
                 headers=self.headers,
-                params=self.params,
+                params=params,
                 json=data
             )
             response.raise_for_status()
             
-            # Extract snapshot ID from response
-            snapshot_id = response.text.strip()
-            logger.info(f"Successfully triggered scrape with snapshot ID: {snapshot_id}")
-            return snapshot_id
+            logger.info("Successfully triggered scrape. Results will be sent to webhook.")
+            return True
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Error response: {e.response.text}")
-            return None
+            return False
         except Exception as e:
             logger.error(f"Other error: {str(e)}")
-            return None
-    
-    def _check_status(self, snapshot_id: str) -> bool:
-        """
-        Check the status of a scrape.
-        Returns True if complete, False otherwise.
-        """
-        try:
-            response = requests.get(
-                f"{self.base_url}/progress/{snapshot_id}",
-                headers=self.headers
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            # Log the current status
-            logger.debug(f"Scrape status for {snapshot_id}: {result}")
-            
-            # Check status field in response
-            if isinstance(result, dict) and 'status' in result:
-                status = result['status']
-                logger.info(f"Current status: {status}")
-                return status == "ready"
-            
-            # Fallback for old format
-            return result == "ready"
-            
-        except Exception as e:
-            logger.error(f"Error checking status for snapshot {snapshot_id}: {e}")
             return False
     
-    def _fetch_posts_from_snapshot(self, snapshot_id: str) -> str:
+    def get_events(self) -> List[Any]:
         """
-        Fetch posts directly from an existing snapshot ID.
-        This is useful when we know a scrape has already completed.
-        """
-        try:
-            response = requests.get(
-                f"{self.base_url}/snapshot/{snapshot_id}",
-                headers=self.headers,
-                params={"format": "json"}
-            )
-            
-            # Debug logging for request
-            logger.info(f"Fetching snapshot with:")
-            logger.info(f"URL: {self.base_url}/snapshot/{snapshot_id}")
-            logger.info(f"Headers: {self.headers}")
-            logger.info(f"Params: {{'format': 'json'}}")
-            
-            # Handle empty snapshots (returns 400 with "Snapshot is empty" message)
-            if response.status_code == 400 and response.text.strip() == "Snapshot is empty":
-                logger.info(f"Snapshot {snapshot_id} is empty, returning empty list")
-                return json.dumps([])
-            
-            # For all other responses, check status code
-            response.raise_for_status()
-            results = response.json()
-            
-            logger.info(f"Successfully retrieved {len(results)} posts from snapshot {snapshot_id}")
-            return json.dumps(results)
-            
-        except Exception as e:
-            logger.error(f"Error retrieving results for snapshot {snapshot_id}: {e}")
-            raise
-    
-    def _fetch_posts(self, url: str = None, snapshot_id: str = None) -> str:
-        """
-        Fetch posts from the Facebook group.
+        Trigger a new scrape of the Facebook group.
+        Results will be sent to the configured webhook.
         
-        Args:
-            url: Dummy parameter to satisfy the cached_request decorator.
-                 Not actually used since we're using cache_key.
-            snapshot_id: Optional snapshot ID to fetch from directly.
-                        If provided, skips triggering a new scrape.
-        """
-        # If snapshot_id is provided, fetch directly from it
-        if snapshot_id:
-            return self._fetch_posts_from_snapshot(snapshot_id)
-            
-        # Otherwise, do the normal scrape process
-        url = url or f"{self.base_url}/trigger"
-        
-        # Trigger new scrape
-        snapshot_id = self._trigger_scrape()
-        if not snapshot_id:
-            raise Exception("Failed to trigger scrape")
-        
-        logger.info(f"Waiting initial {self.initial_wait} seconds for scrape to complete...")
-        time.sleep(self.initial_wait)
-        
-        # Poll for completion
-        attempts = 0
-        while attempts < self.max_poll_attempts:
-            if self._check_status(snapshot_id):
-                # Get the results
-                return self._fetch_posts_from_snapshot(snapshot_id)
-            
-            logger.info(f"Still waiting... (attempt {attempts + 1}/{self.max_poll_attempts})")
-            time.sleep(self.poll_interval)
-            attempts += 1
-        
-        raise Exception("Scrape timed out or failed to retrieve results")
-    
-    def configure(self, config: Dict[str, Any]) -> None:
-        """Configure scraper settings from dictionary."""
-        if config is None:
-            return
-            
-        # Update configurable parameters
-        if 'days_to_fetch' in config:
-            self.days_to_fetch = config['days_to_fetch']
-        if 'initial_wait' in config:
-            self.initial_wait = config['initial_wait']
-        if 'poll_interval' in config:
-            self.poll_interval = config['poll_interval']
-        if 'max_attempts' in config:
-            self.max_poll_attempts = config['max_attempts']
-    
-    def get_events(self, snapshot_id: str = None) -> List[Event]:
-        """
-        Get events from Facebook group posts.
-        
-        Args:
-            snapshot_id: Optional snapshot ID to fetch from directly
+        Returns:
+            List[Any]: Empty list since results come via webhook
         """
         try:
-            logger.info(f"Fetching Facebook posts for the last {self.days_to_fetch} days")
-            # Fetch posts
-            posts_json = self._fetch_posts(
-                url=self.base_url + "/trigger",
-                snapshot_id=snapshot_id
-            )
-            posts = json.loads(posts_json)
+            logger.info(f"Triggering Facebook scrape for the last {self.brightdata_config['days_to_fetch']} days")
+            success = self._trigger_scrape()
             
-            # Filter out "no results" records (they have url=null and usually a warning message)
-            valid_posts = [post for post in posts if post.get('url') is not None]
-            if len(valid_posts) < len(posts):
-                logger.info(f"Filtered out {len(posts) - len(valid_posts)} 'no results' records")
-                if not valid_posts:
-                    logger.info("No valid posts found in response")
-                    return []
+            if success:
+                logger.info("Scrape triggered successfully. Results will be processed via webhook.")
+            else:
+                logger.error("Failed to trigger scrape")
             
-            # Find the date range of the fetched posts
-            post_dates = []
-            for post in valid_posts:
-                try:
-                    if post.get('date_posted'):
-                        post_date = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted'])).date()
-                        post_dates.append(post_date)
-                except (ValueError, TypeError):
-                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
-                    continue
-            
-            if not post_dates:
-                logger.warning("No valid dates found in posts")
-                return []
-            
-            # Get the date range
-            start_date = min(post_dates)
-            end_date = max(post_dates)
-            logger.info(f"Posts span from {start_date} to {end_date}")
-            
-            # Get URLs of events we already have in the database for this date range
-            db = get_db()
-            try:
-                existing_events = db.query(Event).filter(
-                    Event.source_name == self.name(),
-                    Event.start_time >= start_date,
-                    Event.start_time <= end_date + timedelta(days=1)
-                ).all()
-                existing_urls = {event.source_url for event in existing_events if event.source_url}
-                logger.info(f"Found {len(existing_urls)} existing events in date range")
-            finally:
-                db.close()
-            
-            # Process each post
-            events = []
-            for post in valid_posts:
-                try:
-                    # Skip if we already have this event
-                    post_url = post.get('url')
-                    if post_url in existing_urls:
-                        logger.debug(f"Skipping already processed post: {post_url}")
-                        continue
-                    
-                    # Check if this is an event post
-                    if not is_event_post(post.get('text', '')):
-                        logger.debug(f"Post is not an event: {post_url}")
-                        continue
-                    
-                    # Parse event details
-                    event_details = parse_event_details(post.get('text', ''))
-                    if not event_details:
-                        logger.warning(f"Failed to parse event details from post: {post_url}")
-                        continue
-                    
-                    # Create event object
-                    event = Event(
-                        title=event_details.get('title', 'Untitled Event'),
-                        description=event_details.get('description', ''),
-                        start_time=event_details.get('start_time'),
-                        end_time=event_details.get('end_time'),
-                        location=event_details.get('location'),
-                        source_url=post_url,
-                        source_name=self.name(),
-                        fetched_at=now_oslo()
-                    )
-                    
-                    # Add to list if we have required fields
-                    if event.title and event.start_time:
-                        events.append(event)
-                    else:
-                        logger.warning(f"Skipping event with missing required fields: {post_url}")
-                
-                except Exception as e:
-                    logger.error(f"Error processing post: {e}")
-                    continue
-            
-            logger.info(f"Successfully parsed {len(events)} events from {len(valid_posts)} posts")
-            return events
+            return []  # Results come via webhook
             
         except Exception as e:
-            logger.error(f"Error fetching events from Facebook: {e}")
-            return [] 
+            logger.error(f"Error triggering scrape: {e}")
+            return []
+
+if __name__ == "__main__":
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Create and run scraper
+    scraper = FacebookGroupScraper()
+    success = scraper._trigger_scrape()
+    
+    # Print results
+    if success:
+        print("\nScrape triggered successfully!")
+        print("Results will be sent to the configured webhook.")
+    else:
+        print("\nFailed to trigger scrape.")
+        print("Check the logs for more details.") 

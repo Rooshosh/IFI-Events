@@ -4,9 +4,14 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import os
+import logging
 
 from ..db.session import db_manager, init_db
 from ..models.event import Event
+from .webhooks import router as webhook_router
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Get environment setting
 environment = os.environ.get('ENVIRONMENT', 'development')
@@ -32,6 +37,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include webhook router
+app.include_router(webhook_router)
 
 # Dependency to get DB session
 def get_db():
