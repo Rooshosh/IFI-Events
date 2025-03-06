@@ -14,13 +14,13 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.scrapers.base import BaseScraper
+from src.scrapers.base import SyncScraper
 from src.models.event import Event
 from src.utils.timezone import ensure_oslo_timezone, now_oslo
 
 logger = logging.getLogger(__name__)
 
-class NavetScraper(BaseScraper):
+class NavetScraper(SyncScraper):
     """
     Scraper for ifinavet.no events.
     

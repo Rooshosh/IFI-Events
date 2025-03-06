@@ -1,6 +1,6 @@
 """Base interface that all event scrapers must implement."""
 
-from typing import List
+from typing import List, Optional
 from abc import ABC, abstractmethod
 from ..models.event import Event
 
@@ -15,7 +15,6 @@ class BaseScraper(ABC):
     
     Required Methods:
         name(): Returns the scraper's identifier (e.g., 'peoply.app')
-        get_events(): Fetches and returns a list of events from the source
     """
     
     @abstractmethod
@@ -28,6 +27,17 @@ class BaseScraper(ABC):
             str: The scraper's identifier (e.g., 'peoply.app', 'ifinavet.no')
         """
         pass
+
+class SyncScraper(BaseScraper):
+    """
+    Base class for synchronous scrapers that directly return events.
+    
+    This is for scrapers that can immediately fetch and return events,
+    like peoply.app and ifinavet.no.
+    
+    Required Methods:
+        get_events(): Fetches and returns a list of events from the source
+    """
     
     @abstractmethod
     def get_events(self) -> List[Event]:
@@ -41,5 +51,30 @@ class BaseScraper(ABC):
         
         Returns:
             List[Event]: List of events from this source
+        """
+        pass
+
+class AsyncScraper(BaseScraper):
+    """
+    Base class for asynchronous scrapers that trigger data fetching.
+    
+    This is for scrapers that need to trigger a data fetch operation
+    that will be handled later by a webhook or callback, like the Facebook scraper.
+    
+    Required Methods:
+        initialize_data_fetch(): Triggers the data fetching process
+    """
+    
+    @abstractmethod
+    def initialize_data_fetch(self) -> bool:
+        """
+        Initialize the data fetching process.
+        
+        This method should:
+        1. Trigger the data fetching process (e.g., API call, webhook setup)
+        2. Handle any errors gracefully
+        
+        Returns:
+            bool: True if the fetch was successfully initiated, False otherwise
         """
         pass 

@@ -12,7 +12,7 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.scrapers.base import BaseScraper
+from src.scrapers.base import SyncScraper
 from src.models.event import Event
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -20,7 +20,7 @@ from src.utils.timezone import now_oslo
 
 logger = logging.getLogger(__name__)
 
-class PeoplyScraper(BaseScraper):
+class PeoplyScraper(SyncScraper):
     """Scraper for peoply.app events"""
     
     # Default configuration

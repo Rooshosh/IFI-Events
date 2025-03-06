@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 if __name__ == "__main__":
     sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.scrapers.base import BaseScraper
+from src.scrapers.base import AsyncScraper
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ DEFAULT_BRIGHTDATA_CONFIG = {
     'include_errors': True
 }
 
-class FacebookGroupScraper(BaseScraper):
+class FacebookGroupScraper(AsyncScraper):
     """
     Scraper for Facebook group posts using BrightData's API.
     
@@ -99,9 +99,10 @@ class FacebookGroupScraper(BaseScraper):
         """Return the name of the scraper"""
         return "Facebook (IFI-studenter)"
     
-    def _trigger_scrape(self) -> bool:
+    def initialize_data_fetch(self) -> bool:
         """
         Trigger a new scrape of the Facebook group.
+        Results will be sent to the configured webhook.
         
         Returns:
             bool: True if successful, False otherwise.
@@ -164,29 +165,6 @@ class FacebookGroupScraper(BaseScraper):
         except Exception as e:
             logger.error(f"Other error: {str(e)}")
             return False
-    
-    def get_events(self) -> List[Any]:
-        """
-        Trigger a new scrape of the Facebook group.
-        Results will be sent to the configured webhook.
-        
-        Returns:
-            List[Any]: Empty list since results come via webhook
-        """
-        try:
-            logger.info(f"Triggering Facebook scrape for the last {self.brightdata_config['days_to_fetch']} days")
-            success = self._trigger_scrape()
-            
-            if success:
-                logger.info("Scrape triggered successfully. Results will be processed via webhook.")
-            else:
-                logger.error("Failed to trigger scrape")
-            
-            return []  # Results come via webhook
-            
-        except Exception as e:
-            logger.error(f"Error triggering scrape: {e}")
-            return []
 
 if __name__ == "__main__":
     # Set up logging
@@ -197,7 +175,7 @@ if __name__ == "__main__":
     
     # Create and run scraper
     scraper = FacebookGroupScraper()
-    success = scraper._trigger_scrape()
+    success = scraper.initialize_data_fetch()
     
     # Print results
     if success:

@@ -19,7 +19,7 @@ import importlib
 import logging
 import sys
 from pathlib import Path
-from typing import List, Type, Dict
+from typing import List, Type, Dict, Tuple
 from datetime import datetime
 
 # Add src to Python path when running directly
@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
 # Now we can use absolute imports
 from src.models.event import Event
-from src.scrapers.base import BaseScraper
+from src.scrapers.base import BaseScraper, SyncScraper, AsyncScraper
 from src.config.sources import get_enabled_sources, ScraperRegistration
 
 logger = logging.getLogger(__name__)
@@ -77,9 +77,99 @@ class SourceManager:
             raise
     
     @staticmethod
-    def get_events_from_source(source_id: str, registration: ScraperRegistration) -> List[Event]:
+    def _get_scraper_type(scraper_class: Type[BaseScraper]) -> str:
         """
-        Get events from a single source.
+        Determine if a scraper is synchronous or asynchronous.
+        
+        Args:
+            scraper_class: The scraper class to check
+            
+        Returns:
+            str: Either 'sync' or 'async'
+        """
+        if issubclass(scraper_class, AsyncScraper):
+            return 'async'
+        elif issubclass(scraper_class, SyncScraper):
+            return 'sync'
+        else:
+            raise TypeError(f"Scraper class {scraper_class.__name__} must implement either SyncScraper or AsyncScraper")
+    
+    @staticmethod
+    def _group_scrapers_by_type(enabled_sources: Dict[str, ScraperRegistration]) -> Tuple[List[Tuple[str, ScraperRegistration]], List[Tuple[str, ScraperRegistration]]]:
+        """
+        Group scrapers by their type (sync or async).
+        
+        Args:
+            enabled_sources: Dictionary of enabled source IDs and their registrations
+            
+        Returns:
+            Tuple containing:
+            - List of (source_id, registration) tuples for async scrapers
+            - List of (source_id, registration) tuples for sync scrapers
+        """
+        async_scrapers = []
+        sync_scrapers = []
+        
+        for source_id, registration in enabled_sources.items():
+            try:
+                scraper_class = SourceManager.get_scraper_class(registration)
+                scraper_type = SourceManager._get_scraper_type(scraper_class)
+                
+                if scraper_type == 'async':
+                    async_scrapers.append((source_id, registration))
+                else:
+                    sync_scrapers.append((source_id, registration))
+                    
+            except Exception as e:
+                logger.error(f"Failed to determine type for scraper {source_id}: {e}")
+                continue
+        
+        return async_scrapers, sync_scrapers
+    
+    @staticmethod
+    def initialize_async_scrapers() -> bool:
+        """
+        Initialize all asynchronous scrapers.
+        
+        This method:
+        1. Gets the list of enabled scrapers
+        2. Identifies async scrapers
+        3. Initializes each async scraper
+        
+        Returns:
+            bool: True if all async scrapers were initialized successfully
+        """
+        enabled_sources = get_enabled_sources()
+        async_scrapers, _ = SourceManager._group_scrapers_by_type(enabled_sources)
+        
+        if not async_scrapers:
+            logger.info("No async scrapers to initialize")
+            return True
+            
+        logger.info(f"Initializing {len(async_scrapers)} async scrapers")
+        all_success = True
+        
+        for source_id, registration in async_scrapers:
+            try:
+                scraper_class = SourceManager.get_scraper_class(registration)
+                scraper = scraper_class()
+                logger.info(f"Initializing async scraper: {scraper.name()}")
+                
+                success = scraper.initialize_data_fetch()
+                if not success:
+                    logger.error(f"Failed to initialize async scraper {source_id}")
+                    all_success = False
+                    
+            except Exception as e:
+                logger.error(f"Error initializing async scraper {source_id}: {e}")
+                all_success = False
+        
+        return all_success
+    
+    @staticmethod
+    def get_events_from_sync_source(source_id: str, registration: ScraperRegistration) -> List[Event]:
+        """
+        Get events from a single synchronous source.
         
         Args:
             source_id: Identifier for the source (for logging)
@@ -90,6 +180,10 @@ class SourceManager:
         """
         try:
             scraper_class = SourceManager.get_scraper_class(registration)
+            if not issubclass(scraper_class, SyncScraper):
+                logger.error(f"Scraper {source_id} is not a synchronous scraper")
+                return []
+                
             scraper = scraper_class()
             logger.info(f"Fetching events from {scraper.name()}")
             events = scraper.get_events()
@@ -105,27 +199,37 @@ class SourceManager:
         Get events from all enabled scrapers.
         
         This method:
-        1. Gets the list of enabled scrapers from the registry
-        2. Initializes each enabled scraper
-        3. Fetches events from each scraper
-        4. Combines all events into a single list
+        1. Initializes all async scrapers first
+        2. Then fetches events from all sync scrapers
+        3. Combines all events into a single list
         
         Returns:
             List[Event]: Combined list of events from all enabled scrapers
         """
+        # First initialize all async scrapers
+        async_success = SourceManager.initialize_async_scrapers()
+        if not async_success:
+            logger.warning("Some async scrapers failed to initialize")
+        
+        # Then get events from all sync scrapers
         all_events = []
         enabled_sources = get_enabled_sources()
-        logger.info(f"Fetching events from {len(enabled_sources)} enabled scrapers")
+        _, sync_scrapers = SourceManager._group_scrapers_by_type(enabled_sources)
         
-        for source_id, registration in enabled_sources.items():
+        logger.info(f"Fetching events from {len(sync_scrapers)} sync scrapers")
+        
+        for source_id, registration in sync_scrapers:
             try:
-                events = SourceManager.get_events_from_source(source_id, registration)
+                events = SourceManager.get_events_from_sync_source(source_id, registration)
                 all_events.extend(events)
             except Exception as e:
                 logger.error(f"Failed to get events from {source_id}: {e}")
         
-        logger.info(f"Found total of {len(all_events)} events from all sources")
+        logger.info(f"Found total of {len(all_events)} events from sync sources")
         return all_events
+        # Async scrapers are not included in the returned list,
+        # because they are not fetched directly by this function.
+        # They must be handled by the webhook or callback mechanism.
 
 if __name__ == "__main__":
     # Set up logging
