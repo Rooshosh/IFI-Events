@@ -18,8 +18,8 @@ def get_db_url():
     if os.environ.get('TESTING') == 'true':
         return "sqlite:///:memory:"
     
-    # Get environment setting, default to development if not set
-    environment = os.environ.get('ENVIRONMENT', 'development').strip()
+    # Get environment setting, default to production if not set
+    environment = os.environ.get('ENVIRONMENT', 'production').strip()
     
     if environment.lower() == 'development':
         # Use SQLite for development
