@@ -1,6 +1,6 @@
 """Main FastAPI application module."""
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
@@ -83,9 +83,38 @@ async def get_event(event_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Event not found")
     return event.to_dict()
 
+async def run_fetch_script():
+    """Background task to run the fetch script."""
+    try:
+        script_path = Path(__file__).parent.parent.parent / 'scripts' / 'get_new_data.py'
+        # Run the script with a timeout to prevent hanging
+        result = subprocess.run(
+            ['python', str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        # Log the output for debugging
+        if result.stdout:
+            print(f"Script output: {result.stdout}")
+        if result.stderr:
+            print(f"Script errors: {result.stderr}")
+            
+        if result.returncode != 0:
+            print(f"Script failed with return code {result.returncode}")
+            
+    except subprocess.TimeoutExpired:
+        print("Script timed out after 5 minutes")
+    except Exception as e:
+        print(f"Background fetch failed: {str(e)}")
+
 # Fetch trigger endpoint
 @app.post("/admin/fetch")
-async def trigger_fetch(authorization: str = Header(...)):
+async def trigger_fetch(
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(...)
+):
     """Trigger a fetch of new events from all sources."""
     expected_token = os.environ.get('ADMIN_API_KEY')
     if not expected_token:
@@ -94,29 +123,10 @@ async def trigger_fetch(authorization: str = Header(...)):
     if authorization != f"Bearer {expected_token}":
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     
-    try:
-        # Get the path to the script
-        script_path = Path(__file__).parent.parent.parent / 'scripts' / 'get_new_data.py'
-        
-        # Run the script
-        result = subprocess.run(['python', str(script_path)], 
-                              capture_output=True, 
-                              text=True)
-        
-        if result.returncode != 0:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Script failed: {result.stderr}"
-            )
-        
-        return {
-            "status": "success",
-            "message": "Fetch completed successfully",
-            "details": result.stdout
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to run fetch script: {str(e)}"
-        ) 
+    # Add the fetch task to background tasks
+    background_tasks.add_task(run_fetch_script)
+    
+    return {
+        "status": "success",
+        "message": "Fetch request received and processing started in background"
+    } 

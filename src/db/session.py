@@ -62,11 +62,23 @@ class DatabaseManager:
                     "detect_types": 3
                 }
             
+            # Configure connection pool for PostgreSQL
+            pool_args = {}
+            if not db_url.startswith('sqlite'):
+                pool_args = {
+                    'pool_size': 5,  # Limit pool size
+                    'max_overflow': 10,  # Allow some overflow
+                    'pool_timeout': 30,  # Timeout for getting connection from pool
+                    'pool_recycle': 1800,  # Recycle connections after 30 minutes
+                    'pool_pre_ping': True  # Verify connection before using
+                }
+            
             self.engine = create_engine(
                 db_url,
                 echo=False,
                 connect_args=connect_args,
-                poolclass=StaticPool if db_url.startswith('sqlite') else None
+                poolclass=StaticPool if db_url.startswith('sqlite') else None,
+                **pool_args
             )
             self.session_factory.configure(bind=self.engine)
     
@@ -93,13 +105,16 @@ class DatabaseManager:
     
     def get_session(self):
         """Get a new database session (for compatibility with existing code)."""
+        if not self.engine:
+            self.setup_engine()
         if not self.Session.registry.has():
             self.Session.configure(bind=self.engine)
         return self.Session()
     
     def close_session(self):
-        """Remove the current session (for compatibility with existing code)."""
-        self.Session.remove()
+        """Close the current session and remove it from the registry."""
+        if self.Session.registry.has():
+            self.Session.remove()
     
     def cleanup_test_db(self):
         """Clean up test database. Only for test environment."""
