@@ -14,12 +14,24 @@ DB_PATH = Path(__file__).parent.parent.parent / 'data' / 'events.db'
 
 def get_db_url():
     """Get database URL based on environment."""
+    # Debug: Print all environment variables (without values)
+    print("Available environment variables:")
+    for key in os.environ.keys():
+        print(f"- {key}")
+    
     # Check if we're in test environment
     if os.environ.get('TESTING') == 'true':
         return "sqlite:///:memory:"
     
     # Get environment setting, default to production if not set
     environment = os.environ.get('ENVIRONMENT', 'production').strip()
+    print(f"Current environment: {environment}")  # Debug log
+    
+    # Debug log for DATABASE_URL
+    db_url = os.environ.get('DATABASE_URL')
+    print(f"DATABASE_URL present: {bool(db_url)}")  # Debug log
+    if db_url:
+        print(f"DATABASE_URL length: {len(db_url)}")  # Debug log
     
     if environment.lower() == 'development':
         # Use SQLite for development
