@@ -1,14 +1,15 @@
 """Main FastAPI application module."""
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+import subprocess
+from pathlib import Path
 
-# Load environment variables from .env file
 load_dotenv()
 
 from ..db.session import db_manager, init_db
@@ -80,4 +81,42 @@ async def get_event(event_id: int, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return event.to_dict() 
+    return event.to_dict()
+
+# Fetch trigger endpoint
+@app.post("/admin/fetch")
+async def trigger_fetch(authorization: str = Header(...)):
+    """Trigger a fetch of new events from all sources."""
+    expected_token = os.environ.get('ADMIN_API_KEY')
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="Admin API key not configured")
+    
+    if authorization != f"Bearer {expected_token}":
+        raise HTTPException(status_code=401, detail="Invalid authorization token")
+    
+    try:
+        # Get the path to the script
+        script_path = Path(__file__).parent.parent.parent / 'scripts' / 'get_new_data.py'
+        
+        # Run the script
+        result = subprocess.run(['python', str(script_path)], 
+                              capture_output=True, 
+                              text=True)
+        
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Script failed: {result.stderr}"
+            )
+        
+        return {
+            "status": "success",
+            "message": "Fetch completed successfully",
+            "details": result.stdout
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to run fetch script: {str(e)}"
+        ) 
