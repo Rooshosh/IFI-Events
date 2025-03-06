@@ -18,9 +18,8 @@ from zoneinfo import ZoneInfo
 
 from src.db.session import get_db
 from src.models.event import Event
-from src.models.raw_scrape_data import RawScrapeData
-from src.utils.timezone import now_oslo
 from src.new_event_handler import NewEventHandler
+from src.utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
 
 logger = logging.getLogger(__name__)
 
@@ -58,87 +57,6 @@ async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEAD
     
     return auth_header
 
-def _parse_post_date(date_str: str) -> datetime:
-    """Parse a post's date string into a datetime object"""
-    try:
-        # Example format: "2024-03-19T14:30:00"
-        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        return dt.astimezone(ZoneInfo("Europe/Oslo"))
-    except Exception as e:
-        logger.error(f"Error parsing date {date_str}: {e}")
-        raise
-
-def _create_event_from_post(post: Dict[str, Any]) -> Event:
-    """Convert a Facebook post into an Event object"""
-    try:
-        # Extract post data
-        title = post.get('title', 'Facebook Post')
-        description = post.get('description', '')
-        post_date = _parse_post_date(post.get('date', ''))
-        post_url = post.get('url', '')
-        
-        # Create event
-        event = Event(
-            title=title,
-            description=description,
-            start_time=post_date,
-            end_time=None,  # Facebook posts don't have end times
-            location=None,  # Facebook posts don't have locations
-            source_url=post_url,
-            source_name="Facebook (IFI-studenter)",
-            fetched_at=now_oslo()
-        )
-        
-        # Add author if available
-        if post.get('author'):
-            event.author = post['author']
-        
-        return event
-        
-    except Exception as e:
-        logger.error(f"Error creating event from post: {e}")
-        raise
-
-def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
-    """
-    Process BrightData webhook data containing Facebook posts.
-    
-    Args:
-        data: The webhook payload from BrightData
-        
-    Returns:
-        List[Event]: List of events created from the posts
-    """
-    try:
-        # Log the incoming data for debugging
-        logger.debug(f"Received data: {json.dumps(data, indent=2)}")
-        
-        # Extract posts from the data
-        posts = data.get('posts', [])
-        if not posts:
-            logger.warning("No posts found in data")
-            return []
-        
-        logger.info(f"Processing {len(posts)} posts from Facebook")
-        
-        # Process each post
-        events: List[Event] = []
-        for post in posts:
-            try:
-                event = _create_event_from_post(post)
-                events.append(event)
-                logger.info(f"Created event: {event.title} ({event.start_time})")
-            except Exception as e:
-                logger.error(f"Failed to process post: {e}")
-                continue
-        
-        logger.info(f"Successfully processed {len(events)} events from {len(posts)} posts")
-        return events
-        
-    except Exception as e:
-        logger.error(f"Error processing data: {e}")
-        return []
-
 @router.post("/brightdata/facebook-group/results")
 async def handle_brightdata_facebook_group_webhook(
     data: dict | list = Body(..., media_type="application/json"),
@@ -160,43 +78,19 @@ async def handle_brightdata_facebook_group_webhook(
         if isinstance(data, list):
             data = {"events": data}
         
-        # Store the raw data in the database
-        try:
-            raw_data = RawScrapeData(
-                source='brightdata_facebook_group',
-                raw_data=data,
-                created_at=datetime.now()
-            )
-            db.add(raw_data)
-            db.commit()
-            logger.info(f"Successfully stored raw data with ID: {raw_data.id}")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error storing raw data: {e}")
-            # Continue processing even if storage fails
-        
-        # Log the structure of the data
-        logger.info("Data structure:")
-        if "events" in data:
-            for i, event in enumerate(data["events"]):
-                logger.info(f"Event {i + 1}:")
-                for key, value in event.items():
-                    logger.info(f"  {key}: {value}")
-        
-        # Process the data
+        # Process the data using the Facebook processor
         events = process_facebook_data(data)
         
         # Store processed events using NewEventHandler
-        handler = NewEventHandler(skip_merging=True)  # Skip merging for now
+        handler = NewEventHandler()  # Skip merging for now
         new_count, updated_count = handler.process_new_events(events, "Facebook (IFI-studenter)")
         
         return {
             "status": "success",
-            "message": "Data received, stored, and processed",
+            "message": "Data received and processed",
             "events_processed": len(events),
             "new_events": new_count,
-            "updated_events": updated_count,
-            "raw_data_id": raw_data.id if 'raw_data' in locals() else None
+            "updated_events": updated_count
         }
         
     except Exception as e:

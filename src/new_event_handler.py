@@ -30,7 +30,7 @@ class NewEventHandler:
         self,
         db_manager: Optional[DatabaseManager] = None,
         config: Optional[DuplicateConfig] = None,
-        skip_merging: bool = False
+        skip_merging: bool = True
     ):
         """
         Initialize the handler.

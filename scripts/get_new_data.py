@@ -29,7 +29,7 @@ def main():
         logger.info(f"Found {len(events)} events from all sources")
         
         # Process events using the handler
-        handler = NewEventHandler(skip_merging=True)  # Skip merging for now
+        handler = NewEventHandler()
         new_count, updated_count = handler.process_new_events(events, "all_sources")
         
         logger.info(f"Successfully processed events ({new_count} new, {updated_count} updated)")
