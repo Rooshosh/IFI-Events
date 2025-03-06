@@ -5,6 +5,7 @@ import os
 import sys
 import logging
 import requests
+import json
 from pathlib import Path
 
 # Add src to Python path
@@ -49,7 +50,64 @@ def fetch_snapshot(snapshot_id: str) -> dict:
     
     data = response.json()
     logger.info(f"Successfully fetched {len(data)} posts from snapshot")
+    
+    # Log the first post to see its structure
+    if data:
+        logger.info("First post structure:")
+        logger.info(json.dumps(data[0], indent=2))
+    
     return data
+
+def format_data_for_webhook(data: list) -> dict:
+    """
+    Format the snapshot data to match the expected webhook format.
+    
+    Args:
+        data: List of posts from the snapshot
+        
+    Returns:
+        dict: Formatted data for the webhook
+        
+    The data format matches BrightData's Facebook Group Scraper output:
+    {
+        "posts": [
+            {
+                "url": "https://facebook.com/...",
+                "post_id": "...",
+                "user_username_raw": "Author Name",
+                "content": "Post content",
+                "date_posted": "2025-03-03T08:42:22.000Z",
+                "num_comments": 0,
+                "num_shares": 0,
+                "num_likes_type": {"type": "Like", "num": 2},
+                "group_name": "Group Name",
+                "group_id": "...",
+                // ... additional fields from BrightData
+            },
+            ...
+        ]
+    }
+    """
+    # The processor expects data in the format:
+    # {
+    #     "posts": [
+    #         {
+    #             "title": "Post title",
+    #             "description": "Post content",
+    #             "date": "2024-03-19T14:30:00",
+    #             "url": "https://facebook.com/...",
+    #             "author": "Post author"
+    #         },
+    #         ...
+    #     ]
+    # }
+    formatted_data = {"posts": data}
+    
+    # Log the formatted data structure
+    logger.info("Formatted webhook data structure:")
+    logger.info(json.dumps(formatted_data, indent=2))
+    
+    return formatted_data
 
 def simulate_webhook(snapshot_id: str):
     """
@@ -60,7 +118,10 @@ def simulate_webhook(snapshot_id: str):
     """
     try:
         # Fetch data from snapshot
-        data = fetch_snapshot(snapshot_id)
+        raw_data = fetch_snapshot(snapshot_id)
+        
+        # Format data for webhook
+        webhook_data = format_data_for_webhook(raw_data)
         
         # Get authorization header from environment
         auth_header = os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER')
@@ -70,9 +131,8 @@ def simulate_webhook(snapshot_id: str):
         # Send to webhook
         logger.info("Sending data to webhook...")
         response = requests.post(
-            # TODO: only works on localhost
-            "http://localhost:8000/webhook/brightdata/results",
-            json=data,
+            "http://localhost:8000/webhook/brightdata/facebook-group/results",
+            json=webhook_data,
             headers={
                 "Authorization": auth_header
             }

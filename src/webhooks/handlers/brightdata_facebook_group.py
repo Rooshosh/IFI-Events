@@ -6,7 +6,7 @@ and processes them into events.
 
 import logging
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Header, Body
+from fastapi import APIRouter, Depends, HTTPException, Header, Body, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -15,6 +15,7 @@ import hmac
 import hashlib
 import json
 from zoneinfo import ZoneInfo
+import asyncio
 
 from src.db.session import get_db
 from src.models.event import Event
@@ -57,8 +58,29 @@ async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEAD
     
     return auth_header
 
+async def process_webhook_data(data: dict, db: Session):
+    """Process webhook data asynchronously."""
+    try:
+        # Convert list to dict if needed
+        if isinstance(data, list):
+            data = {"posts": data}
+        
+        # Process the data using the Facebook processor
+        events = process_facebook_data(data)
+        
+        # Store processed events using NewEventHandler
+        handler = NewEventHandler()  # Skip merging for now
+        new_count, updated_count = handler.process_new_events(events, "Facebook (IFI-studenter)")
+        
+        logger.info(f"Processed {len(events)} events: {new_count} new, {updated_count} updated")
+        
+    except Exception as e:
+        logger.error(f"Error processing webhook data: {e}")
+        raise
+
 @router.post("/brightdata/facebook-group/results")
 async def handle_brightdata_facebook_group_webhook(
+    background_tasks: BackgroundTasks,
     data: dict | list = Body(..., media_type="application/json"),
     authorization: str = Header(..., alias="Authorization"),
     db: Session = Depends(get_db)
@@ -71,28 +93,25 @@ async def handle_brightdata_facebook_group_webhook(
     """
     try:
         # Log incoming data for debugging
-        logger.info(f"Received webhook data: {data}")
-        logger.info(f"Authorization header: {authorization}")
-        
-        # Convert list to dict if needed
+        logger.info("Received webhook data:")
+        logger.info(f"Data type: {type(data)}")
+        logger.info(f"Data keys (if dict): {data.keys() if isinstance(data, dict) else 'N/A'}")
+        logger.info(f"Data length (if list): {len(data) if isinstance(data, list) else 'N/A'}")
+        logger.info("First item structure (if list) or first value (if dict):")
         if isinstance(data, list):
-            data = {"events": data}
+            logger.info(json.dumps(data[0], indent=2) if data else "Empty list")
+        else:
+            logger.info(json.dumps(next(iter(data.values())), indent=2) if data else "Empty dict")
         
-        # Process the data using the Facebook processor
-        events = process_facebook_data(data)
+        # Add processing task to background tasks
+        background_tasks.add_task(process_webhook_data, data, db)
         
-        # Store processed events using NewEventHandler
-        handler = NewEventHandler()  # Skip merging for now
-        new_count, updated_count = handler.process_new_events(events, "Facebook (IFI-studenter)")
-        
+        # Return immediately
         return {
             "status": "success",
-            "message": "Data received and processed",
-            "events_processed": len(events),
-            "new_events": new_count,
-            "updated_events": updated_count
+            "message": "Data received and queued for processing"
         }
         
     except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
+        logger.error(f"Error handling webhook: {e}")
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -36,4 +36,8 @@ from .handlers.brightdata_facebook_group import router as brightdata_facebook_gr
 router.include_router(brightdata_facebook_group_router)
 
 # Export the main webhook router
-__all__ = ['router'] 
+__all__ = ['router']
+
+"""Webhooks package."""
+
+from .routes import router 

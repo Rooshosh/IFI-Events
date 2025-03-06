@@ -1,24 +1,26 @@
+"""Main FastAPI application module."""
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import os
-import logging
 
 from ..db.session import db_manager, init_db
 from ..models.event import Event
-from ..webhooks import router as webhook_router
+from src.webhooks.routes import router as webhook_router
+from src.utils.logging_config import setup_logging
 
 # Set up logging
-logger = logging.getLogger(__name__)
+setup_logging()
 
 # Get environment setting
 environment = os.environ.get('ENVIRONMENT', 'development')
 
 app = FastAPI(
     title="IFI Events API",
-    description="API for IFI Events",
+    description="API for managing and processing events from various sources",
     version="1.0.0",
     docs_url=None if environment == 'production' else '/docs',  # Disable docs in production
     redoc_url=None if environment == 'production' else '/redoc'  # Disable redoc in production
@@ -38,8 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include webhook routers
-app.include_router(webhook_router)
+# Include routers
+app.include_router(webhook_router, prefix="/webhook", tags=["webhooks"])
 
 # Dependency to get DB session
 def get_db():
@@ -53,7 +55,8 @@ def get_db():
 # Test endpoint
 @app.get("/")
 async def root():
-    return {"message": "Welcome to IFI Events API"}
+    """Root endpoint."""
+    return {"message": "Welcome to the IFI Events API"}
 
 # Events endpoint
 @app.get("/events")
