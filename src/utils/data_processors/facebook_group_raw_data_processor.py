@@ -204,9 +204,16 @@ def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
                 else:
                     logger.debug(f"Post not identified as event: {post.get('post_external_title', 'No title')}")
                 
+                # Get the post's creation date
+                created_at = None
+                if post.get('date_posted'):
+                    created_at = _parse_post_date(post['date_posted'])
+                
+                # Store raw data with the post's creation date
                 raw_data_entry = {
                     'raw_data': post,
-                    'processing_status': processing_status
+                    'processing_status': processing_status,
+                    'created_at': created_at
                 }
                 raw_data_entries.append(raw_data_entry)
                     

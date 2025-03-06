@@ -1,8 +1,8 @@
 """Handler for storing raw scrape data in the database."""
 
 import logging
-from typing import Dict, Any, List
-from datetime import datetime
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
 
 from src.models.raw_scrape_data import RawScrapeData
 from src.db.session import DatabaseManager
@@ -34,43 +34,51 @@ class RawDataHandler:
         self,
         source: str,
         raw_data: Dict[str, Any],
-        processing_status: str,
-        processed: bool = True  # Default to True for immediate processing
-    ) -> int:
+        processing_status: str = 'pending',
+        processed: bool = False,
+        created_at: Optional[datetime] = None
+    ) -> Optional[int]:
         """
-        Store raw data with processing status in the database.
+        Store raw data in the database.
         
         Args:
-            source: Name of the data source (e.g., "brightdata_facebook_group")
+            source: Source of the raw data (e.g., 'brightdata_facebook_group')
             raw_data: The raw data to store
-            processing_status: Status of processing (e.g., 'success', 'not_an_event', 'failed', 'pending')
-            processed: Whether the data has been processed (default: True for immediate processing)
+            processing_status: Status of processing ('pending', 'success', 'failed', 'not_an_event')
+            processed: Whether the data has been processed
+            created_at: The creation date of the raw data
             
         Returns:
-            int: ID of the stored raw data entry
+            Optional[int]: ID of the stored entry if successful, None otherwise
         """
         try:
-            now = datetime.now()
+            # Get the post's creation date from raw data if available
+            if created_at is None:
+                created_at = datetime.now(timezone.utc)
+            
+            # Create new raw data entry
             raw_data_entry = RawScrapeData(
                 source=source,
                 raw_data=raw_data,
-                processing_status=processing_status,
-                created_at=now,
+                created_at=created_at,
                 processed=processed,
-                processed_at=now if processed else None
+                processed_at=datetime.now(timezone.utc) if processed else None,
+                processing_status=processing_status
             )
             
+            # Add to database
             with self.db_manager.session() as db:
                 db.add(raw_data_entry)
                 db.commit()
-                logger.info(f"Successfully stored raw data with ID: {raw_data_entry.id}")
-                return raw_data_entry.id
-                
+            
+            logger.info(f"Successfully stored raw data with ID: {raw_data_entry.id}")
+            return raw_data_entry.id
+            
         except Exception as e:
-            logger.error(f"Error storing raw data: {e}")
+            logger.error(f"Failed to store entry: {str(e)}")
             if 'db' in locals():
                 db.rollback()
-            raise
+            return None
     
     def store_batch(
         self,
@@ -82,7 +90,7 @@ class RawDataHandler:
         
         Args:
             source: Name of the data source
-            entries: List of dictionaries containing raw_data and processing_status
+            entries: List of dictionaries containing raw_data, processing_status, and created_at
             
         Returns:
             List[int]: List of IDs of stored entries
@@ -94,9 +102,11 @@ class RawDataHandler:
                 entry_id = self.store_raw_data(
                     source=source,
                     raw_data=entry['raw_data'],
-                    processing_status=entry['processing_status']  # Now expecting a string
+                    processing_status=entry['processing_status'],
+                    created_at=entry.get('created_at')
                 )
-                stored_ids.append(entry_id)
+                if entry_id:
+                    stored_ids.append(entry_id)
             except Exception as e:
                 logger.error(f"Failed to store entry: {e}")
                 continue

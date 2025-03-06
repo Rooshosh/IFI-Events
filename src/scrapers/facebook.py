@@ -22,7 +22,7 @@ DEFAULT_BRIGHTDATA_CONFIG = {
     'api_key': os.getenv('BRIGHTDATA_API_KEY'),
     'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
     'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'days_to_fetch': 1,  # Default to fetching just today's posts
+    'days_to_fetch': 4,  # Default to fetching just today's posts
     'num_of_posts': 20,  # Safety limit on number of posts to fetch
     'webhook_base_url': 'https://e5f0-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
     'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
@@ -95,6 +95,14 @@ class FacebookGroupScraper(AsyncScraper):
             "Content-Type": "application/json",
         }
         self.group_url = self.brightdata_config['group_url']
+        
+        # Calculate date range
+        self.end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        self.start_date = self.end_date - timedelta(days=self.brightdata_config['days_to_fetch'] - 1)
+        
+        # Format dates for API
+        self.start_date_str = self.start_date.strftime('%Y-%m-%d')
+        self.end_date_str = self.end_date.strftime('%Y-%m-%d')
     
     def name(self) -> str:
         """Return the name of the scraper"""
@@ -118,7 +126,7 @@ class FacebookGroupScraper(AsyncScraper):
             List[str]: List of post IDs to exclude from scraping
         """
         # Get URLs from raw data
-        urls = get_facebook_post_urls(days=self.brightdata_config['days_to_fetch'])
+        urls = get_facebook_post_urls(start_date=self.start_date, end_date=self.end_date)
         
         # Extract post IDs from URLs
         post_ids = []
@@ -139,30 +147,19 @@ class FacebookGroupScraper(AsyncScraper):
             bool: True if successful, False otherwise.
         """
         try:
-            # Calculate date range based on days_to_fetch
-            # For days_to_fetch=1, both dates will be today
-            # For days_to_fetch=2, end_date=today, start_date=yesterday
-            # And so on...
-            end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = end_date - timedelta(days=self.brightdata_config['days_to_fetch'] - 1)  # -1 because we want to include today
-            
-            # Format dates for BrightData API (YYYY-MM-DD)
-            start_date_str = start_date.strftime('%Y-%m-%d')
-            end_date_str = end_date.strftime('%Y-%m-%d')
-            
             # Get list of post IDs to exclude
             posts_to_exclude = self._get_excluded_post_ids()
             
             # Prepare request data
             data = [{
                 "url": self.group_url,
-                "start_date": start_date_str,
-                "end_date": end_date_str,
+                "start_date": self.start_date_str,
+                "end_date": self.end_date_str,
                 "num_of_posts": self.brightdata_config['num_of_posts'],
                 "posts_to_not_include": posts_to_exclude
             }]
             
-            logger.info(f"Scraping up to {self.brightdata_config['num_of_posts']} posts from {start_date_str} to {end_date_str}")
+            logger.info(f"Scraping up to {self.brightdata_config['num_of_posts']} posts from {self.start_date_str} to {self.end_date_str}")
             if posts_to_exclude:
                 logger.info(f"Excluding {len(posts_to_exclude)} already processed posts")
             
@@ -202,6 +199,34 @@ class FacebookGroupScraper(AsyncScraper):
         except Exception as e:
             logger.error(f"Other error: {str(e)}")
             return False
+
+def scrape_facebook_posts(days: int = 4):
+    """
+    Scrape Facebook posts from the last N days.
+    
+    Args:
+        days: Number of days to look back
+    """
+    # Calculate date range in Oslo timezone
+    end_date = now_oslo()
+    start_date = end_date - timedelta(days=days)
+    
+    # Set end_date to end of day (23:59:59)
+    end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # Get URLs of already processed posts
+    processed_urls = get_facebook_post_urls(start_date=start_date, end_date=end_date)
+    logger.info(f"Found {len(processed_urls)} already processed posts to exclude")
+    
+    # Initialize scraper
+    scraper = FacebookGroupScraper()
+    
+    # Scrape new posts
+    try:
+        scraper.scrape_posts(start_date=start_date, end_date=end_date, exclude_urls=processed_urls)
+    except Exception as e:
+        logger.error(f"Failed to scrape Facebook posts: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     # Set up logging

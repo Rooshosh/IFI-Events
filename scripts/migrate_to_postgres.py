@@ -19,8 +19,8 @@ from src.db.model import Base
 
 def migrate_data():
     """Migrate data from SQLite to PostgreSQL."""
-    # SQLite connection (source)
-    sqlite_path = Path(__file__).parent.parent / 'events.db'
+    # Path to SQLite database
+    sqlite_path = Path(__file__).parent.parent / 'data' / 'events.db'
     sqlite_url = f"sqlite:///{sqlite_path}"
     sqlite_engine = create_engine(sqlite_url)
 

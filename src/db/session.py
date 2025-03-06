@@ -10,7 +10,7 @@ from pathlib import Path
 from .model import Base
 
 # Database configuration
-DB_PATH = Path(__file__).parent.parent.parent / 'events.db'
+DB_PATH = Path(__file__).parent.parent.parent / 'data' / 'events.db'
 
 def get_db_url():
     """Get database URL based on environment."""
