@@ -34,7 +34,8 @@ class RawDataHandler:
         self,
         source: str,
         raw_data: Dict[str, Any],
-        processing_status: Dict[str, Any]
+        processing_status: str,
+        processed: bool = True  # Default to True for immediate processing
     ) -> int:
         """
         Store raw data with processing status in the database.
@@ -42,17 +43,21 @@ class RawDataHandler:
         Args:
             source: Name of the data source (e.g., "brightdata_facebook_group")
             raw_data: The raw data to store
-            processing_status: Status information about how the data was processed
+            processing_status: Status of processing (e.g., 'success', 'not_an_event', 'failed', 'pending')
+            processed: Whether the data has been processed (default: True for immediate processing)
             
         Returns:
             int: ID of the stored raw data entry
         """
         try:
+            now = datetime.now()
             raw_data_entry = RawScrapeData(
                 source=source,
                 raw_data=raw_data,
                 processing_status=processing_status,
-                created_at=datetime.now()
+                created_at=now,
+                processed=processed,
+                processed_at=now if processed else None
             )
             
             with self.db_manager.session() as db:
@@ -89,7 +94,7 @@ class RawDataHandler:
                 entry_id = self.store_raw_data(
                     source=source,
                     raw_data=entry['raw_data'],
-                    processing_status=entry['processing_status']
+                    processing_status=entry['processing_status']  # Now expecting a string
                 )
                 stored_ids.append(entry_id)
             except Exception as e:

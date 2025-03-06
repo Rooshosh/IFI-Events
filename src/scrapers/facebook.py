@@ -13,6 +13,7 @@ if __name__ == "__main__":
     sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.scrapers.base import AsyncScraper
+from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ DEFAULT_BRIGHTDATA_CONFIG = {
     'group_url': 'https://www.facebook.com/groups/ifistudenter',
     'days_to_fetch': 1,  # Default to fetching just today's posts
     'num_of_posts': 20,  # Safety limit on number of posts to fetch
-    'webhook_base_url': 'https://9219-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
+    'webhook_base_url': 'https://e5f0-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
     'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_auth': os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER'),
     'webhook_format': 'json',
@@ -99,6 +100,36 @@ class FacebookGroupScraper(AsyncScraper):
         """Return the name of the scraper"""
         return "Facebook (IFI-studenter)"
     
+    def _extract_post_id(self, url: str) -> Optional[str]:
+        """Extract the post ID from a Facebook post URL."""
+        if not url:
+            return None
+        try:
+            return url.split('/posts/')[-1].strip('/')
+        except Exception:
+            logger.warning(f"Could not extract post ID from URL: {url}")
+            return None
+    
+    def _get_excluded_post_ids(self) -> List[str]:
+        """
+        Get list of post IDs from raw data that we've already processed.
+        
+        Returns:
+            List[str]: List of post IDs to exclude from scraping
+        """
+        # Get URLs from raw data
+        urls = get_facebook_post_urls(days=self.brightdata_config['days_to_fetch'])
+        
+        # Extract post IDs from URLs
+        post_ids = []
+        for url in urls:
+            post_id = self._extract_post_id(url)
+            if post_id:
+                post_ids.append(post_id)
+        
+        logger.info(f"Found {len(post_ids)} already processed posts to exclude")
+        return post_ids
+    
     def initialize_data_fetch(self) -> bool:
         """
         Trigger a new scrape of the Facebook group.
@@ -119,15 +150,21 @@ class FacebookGroupScraper(AsyncScraper):
             start_date_str = start_date.strftime('%Y-%m-%d')
             end_date_str = end_date.strftime('%Y-%m-%d')
             
+            # Get list of post IDs to exclude
+            posts_to_exclude = self._get_excluded_post_ids()
+            
             # Prepare request data
             data = [{
                 "url": self.group_url,
                 "start_date": start_date_str,
                 "end_date": end_date_str,
-                "num_of_posts": self.brightdata_config['num_of_posts']
+                "num_of_posts": self.brightdata_config['num_of_posts'],
+                "posts_to_not_include": posts_to_exclude
             }]
             
             logger.info(f"Scraping up to {self.brightdata_config['num_of_posts']} posts from {start_date_str} to {end_date_str}")
+            if posts_to_exclude:
+                logger.info(f"Excluding {len(posts_to_exclude)} already processed posts")
             
             # Prepare request parameters
             params = {

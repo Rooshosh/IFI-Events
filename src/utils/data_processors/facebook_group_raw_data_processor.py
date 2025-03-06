@@ -183,20 +183,13 @@ def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
                 # First, determine if this is an event
                 is_event, event_explanation = is_event_post(content, LLM_CONFIG)
                 
-                # Prepare raw data entry with initial analysis
-                processing_status = {
-                    'is_event': is_event,
-                    'event_explanation': event_explanation,
-                    'processed_at': datetime.now().isoformat()
-                }
+                # Set processing status based on event detection
+                processing_status = 'success' if is_event else 'not_an_event'
                 
                 # If it's an event, extract detailed information
                 if is_event:
                     event_details = parse_event_details(content, url, LLM_CONFIG)
                     if event_details:
-                        # Add event details to processing status
-                        processing_status['event_details'] = event_details
-                        
                         try:
                             # Create event object
                             event = _create_event_from_post(post, event_details)
@@ -204,14 +197,16 @@ def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
                             logger.info(f"Created event: {event.title} ({event.start_time})")
                         except ValueError as e:
                             logger.warning(f"Could not create event: {e}")
+                            processing_status = 'failed'
                     else:
                         logger.warning(f"Failed to parse event details for post: {post.get('post_external_title', 'No title')}")
+                        processing_status = 'failed'
                 else:
                     logger.debug(f"Post not identified as event: {post.get('post_external_title', 'No title')}")
                 
                 raw_data_entry = {
                     'raw_data': post,
-                    'processing_status': json.dumps(processing_status)
+                    'processing_status': processing_status
                 }
                 raw_data_entries.append(raw_data_entry)
                     

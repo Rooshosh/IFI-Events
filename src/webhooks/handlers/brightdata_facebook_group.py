@@ -61,6 +61,13 @@ async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEAD
 async def process_webhook_data(data: dict, db: Session):
     """Process webhook data asynchronously."""
     try:
+        # Check for "no posts" warning
+        if isinstance(data, list) and len(data) == 1:
+            first_item = data[0]
+            if isinstance(first_item, dict) and first_item.get('warning_code') == 'dead_page':
+                logger.info(f"No new posts found for the specified period: {first_item.get('warning')}")
+                return
+        
         # Convert list to dict if needed
         if isinstance(data, list):
             data = {"posts": data}
@@ -92,16 +99,16 @@ async def handle_brightdata_facebook_group_webhook(
     and processes them into events.
     """
     try:
-        # Log incoming data for debugging
-        logger.info("Received webhook data:")
-        logger.info(f"Data type: {type(data)}")
-        logger.info(f"Data keys (if dict): {data.keys() if isinstance(data, dict) else 'N/A'}")
-        logger.info(f"Data length (if list): {len(data) if isinstance(data, list) else 'N/A'}")
-        logger.info("First item structure (if list) or first value (if dict):")
-        if isinstance(data, list):
-            logger.info(json.dumps(data[0], indent=2) if data else "Empty list")
-        else:
-            logger.info(json.dumps(next(iter(data.values())), indent=2) if data else "Empty dict")
+        # Log incoming data for debugging (only if DEBUG level is enabled)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Received webhook data:")
+            logger.debug(f"Data type: {type(data)}")
+            logger.debug(f"Data keys (if dict): {data.keys() if isinstance(data, dict) else 'N/A'}")
+            logger.debug(f"Data length (if list): {len(data) if isinstance(data, list) else 'N/A'}")
+            if isinstance(data, list):
+                logger.debug(json.dumps(data[0], indent=2) if data else "Empty list")
+            else:
+                logger.debug(json.dumps(next(iter(data.values())), indent=2) if data else "Empty dict")
         
         # Add processing task to background tasks
         background_tasks.add_task(process_webhook_data, data, db)
