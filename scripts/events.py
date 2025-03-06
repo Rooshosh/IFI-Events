@@ -60,7 +60,7 @@ import os
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.db.database import init_db, get_db, close_db
+from src.db.base import init_db, get_db, close_db
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.scrapers.facebook import FacebookGroupScraper
