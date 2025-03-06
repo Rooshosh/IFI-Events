@@ -74,11 +74,11 @@
                                     class="btn btn-link text-decoration-none"
                                     title="View Event">
                                 <span class="source-text">See on</span>
-                                <img src="{{ url_for('static', filename='img/Filter Icons/' + {
-                                    'peoply.app': 'Peoply.png',
-                                    'ifinavet.no': 'Navet.png',
-                                    'facebook.group': 'Facebook.png'
-                                }[event.source_name]) }}" alt="{{ event.source_name }}" class="source-icon">
+                                <img src="/static/img/sources/${
+                                    event.source_name === 'Peoply' ? 'peoply.png' :
+                                    event.source_name === 'ifinavet.no' ? 'navet.png' :
+                                    'facebook.png'
+                                }" alt="${event.source_name}" class="source-icon">
                             </button>
                         </div>
                         <div class="list-entry-button list-entry-calendar">
@@ -549,10 +549,10 @@
                                 class="btn btn-link text-decoration-none"
                                 title="View Event">
                             <span class="source-text">See on</span>
-                            <img src="/static/img/Filter Icons/${
-                                event.source_name === 'peoply.app' ? 'Peoply.png' :
-                                event.source_name === 'ifinavet.no' ? 'Navet.png' :
-                                'Facebook.png'
+                            <img src="/static/img/sources/${
+                                event.source_name === 'Peoply' ? 'peoply.png' :
+                                event.source_name === 'ifinavet.no' ? 'navet.png' :
+                                'facebook.png'
                             }" alt="${event.source_name}" class="source-icon">
                         </button>
                     </div>

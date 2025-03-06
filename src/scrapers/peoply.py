@@ -1,29 +1,46 @@
+"""Scraper for peoply.app events"""
+
 from datetime import datetime
 from typing import List
 import requests
 import logging
 import json
-from .base import BaseScraper
-from ..models.event import Event
+import sys
+from pathlib import Path
+
+# Add src to Python path when running directly
+if __name__ == "__main__":
+    sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from src.scrapers.base import BaseScraper
+from src.models.event import Event
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
-from ..utils.timezone import now_oslo
+from src.utils.timezone import now_oslo
 
 logger = logging.getLogger(__name__)
 
 class PeoplyScraper(BaseScraper):
     """Scraper for peoply.app events"""
     
+    # Default configuration
+    BASE_URL = "https://api.peoply.app"
+    EVENTS_LIMIT = 99
+    HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.5',
+    }
+    
     def __init__(self):
-        self.base_url = "https://api.peoply.app"
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.5',
-        }
+        """Initialize the scraper with default settings"""
+        self.base_url = self.BASE_URL
+        self.headers = self.HEADERS.copy()
+        self.events_limit = self.EVENTS_LIMIT
     
     def name(self) -> str:
-        return "peoply.app"
+        """Return the name of the scraper"""
+        return "Peoply"
     
     def _get_api_url(self) -> str:
         """Generate the URL for peoply.app events API with the current date"""
@@ -31,7 +48,7 @@ class PeoplyScraper(BaseScraper):
         current_time = now_oslo().astimezone(ZoneInfo("UTC"))
         time_str = current_time.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         encoded_time = time_str.replace(':', '%3A')
-        return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate&take=99"
+        return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate&take={self.events_limit}"
     
     def _fetch_json(self, url: str) -> str:
         """Fetch JSON content"""
@@ -45,7 +62,7 @@ class PeoplyScraper(BaseScraper):
     def get_events(self) -> List[Event]:
         """Get events from peoply.app API"""
         try:
-            # Fetch events from API (using cache if available)
+            # Fetch events from API
             api_url = self._get_api_url()
             raw_response = self._fetch_json(api_url)
             
@@ -101,6 +118,27 @@ class PeoplyScraper(BaseScraper):
 
         except Exception as e:
             logger.error(f"Error fetching events from {self.name()}: {e}")
-            return [] 
+            return []
+
+if __name__ == "__main__":
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Create and run scraper
+    scraper = PeoplyScraper()
+    events = scraper.get_events()
+    
+    # Print results
+    print(f"\nFound {len(events)} events:")
+    for event in events:
+        print(f"\nTitle: {event.title}")
+        print(f"Date: {event.start_time}")
+        print(f"Location: {event.location}")
+        print(f"URL: {event.source_url}")
+        if event.author:
+            print(f"Organizer: {event.author}")
         
 

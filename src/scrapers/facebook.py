@@ -6,6 +6,7 @@ import time
 from typing import List, Optional, Dict, Any
 import requests
 import json
+import os
 from .base import BaseScraper
 from ..models.event import Event
 from ..utils.timezone import now_oslo, ensure_oslo_timezone
@@ -16,40 +17,87 @@ from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
+# Default OpenAI configuration for event parsing
+# These settings are optimized for:
+# - Consistent outputs (low temperature)
+# - Sufficient context (1000 tokens)
+# - Cost-effective model choice
+DEFAULT_OPENAI_CONFIG = {
+    'api_key': os.getenv('OPENAI_API_KEY'),
+    'model': 'gpt-4-mini',
+    'temperature': 0.3,  # Lower temperature for more consistent outputs
+    'max_tokens': 1000
+}
+
+# Default BrightData configuration
+DEFAULT_BRIGHTDATA_CONFIG = {
+    'api_key': os.getenv('BRIGHTDATA_API_KEY'),
+    'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
+    'group_url': 'https://www.facebook.com/groups/ifistudenter',
+    'days_to_fetch': 1  # Default to fetching just today's posts
+}
+
 class FacebookGroupScraper(BaseScraper):
     """
     Scraper for Facebook group posts using BrightData's API.
     
-    This scraper uses BrightData's 'Facebook - Posts by group URL' dataset
-    to fetch posts from the IFI Students Facebook group, then uses an LLM
-    to identify and parse events from these posts.
+    This scraper:
+    1. Uses BrightData's 'Facebook - Posts by group URL' dataset to fetch posts
+    2. Uses OpenAI's API to identify and parse events from these posts
+    3. Converts parsed posts into Event objects
+    
+    Configuration:
+        brightdata: API configuration for BrightData
+            - api_key: Your BrightData API key
+            - dataset_id: The dataset ID to use
+            - group_url: URL of the Facebook group to scrape
+            - days_to_fetch: How many days of posts to fetch
+            
+        openai: API configuration for OpenAI
+            - api_key: Your OpenAI API key
+            - model: Model to use (default: gpt-4-mini)
+            - temperature: Sampling temperature (default: 0.3)
+            - max_tokens: Maximum tokens to generate (default: 1000)
     """
     
-    def __init__(self):
-        # Get configuration from sources
-        config = SOURCES['facebook']
-        brightdata_config = config.settings['brightdata']
-        openai_config = config.settings['openai']
+    def __init__(self, brightdata_config: Dict[str, Any] = None, openai_config: Dict[str, Any] = None):
+        """
+        Initialize the scraper with optional configuration overrides.
         
-        self.base_url = config.base_url
+        Args:
+            brightdata_config: Override default BrightData settings
+            openai_config: Override default OpenAI settings
+        """
+        # Initialize BrightData configuration
+        self.brightdata_config = DEFAULT_BRIGHTDATA_CONFIG.copy()
+        if brightdata_config:
+            self.brightdata_config.update(brightdata_config)
+            
+        # Initialize OpenAI configuration
+        self.openai_config = DEFAULT_OPENAI_CONFIG.copy()
+        if openai_config:
+            self.openai_config.update(openai_config)
+        
+        # Set up BrightData API parameters
+        self.base_url = "https://api.brightdata.com/datasets/v3"
         self.headers = {
-            "Authorization": f"Bearer {brightdata_config['api_key']}",
+            "Authorization": f"Bearer {self.brightdata_config['api_key']}",
             "Content-Type": "application/json",
         }
         self.params = {
-            "dataset_id": brightdata_config['dataset_id'],
+            "dataset_id": self.brightdata_config['dataset_id'],
             "include_errors": "true",
         }
-        self.group_url = brightdata_config['group_url']
-        self.days_to_fetch = brightdata_config.get('days_to_fetch', 1)  # Default to 1 if not specified
+        self.group_url = self.brightdata_config['group_url']
+        self.days_to_fetch = self.brightdata_config['days_to_fetch']
         
+        # Configure scraping parameters
         self.max_poll_attempts = 60  # Up to 1 hour total (60 attempts)
         self.poll_interval = 60  # seconds (1 minute)
         self.initial_wait = 90  # seconds
         
         # Initialize OpenAI client
-        init_openai(openai_config['api_key'])
-        self.openai_config = openai_config
+        init_openai(self.openai_config['api_key'])
     
     def name(self) -> str:
         """Return the name of the scraper."""

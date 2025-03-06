@@ -1,21 +1,45 @@
-"""Base scraper class that all scrapers must inherit from."""
+"""Base interface that all event scrapers must implement."""
 
 from typing import List
-import json
+from abc import ABC, abstractmethod
 from ..models.event import Event
 
-class BaseScraper:
-    """Base class for all scrapers."""
+class BaseScraper(ABC):
+    """
+    Base interface for all event scrapers.
     
+    Each scraper is responsible for:
+    1. Fetching events from a specific source (e.g., peoply.app, ifinavet.no)
+    2. Converting the source's event format into our Event model
+    3. Handling its own configuration and authentication if needed
+    
+    Required Methods:
+        name(): Returns the scraper's identifier (e.g., 'peoply.app')
+        get_events(): Fetches and returns a list of events from the source
+    """
+    
+    @abstractmethod
     def name(self) -> str:
-        """Return the name of the scraper (e.g., 'peoply.app', 'ifinavet.no')."""
-        raise NotImplementedError("Subclasses must implement name()")
+        """
+        Return the name/identifier of this scraper.
+        This should match the name in the source configuration.
+        
+        Returns:
+            str: The scraper's identifier (e.g., 'peoply.app', 'ifinavet.no')
+        """
+        pass
     
+    @abstractmethod
     def get_events(self) -> List[Event]:
-        """Get events from the source. Must be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement get_events()")
-    
-    def _deserialize_events(self, json_str: str) -> List[Event]:
-        """Deserialize JSON string into list of Event objects."""
-        events_data = json.loads(json_str)
-        return [Event.from_dict(event_data) for event_data in events_data] 
+        """
+        Fetch and return events from this source.
+        
+        This method should:
+        1. Fetch data from the source (e.g., API call, web scraping)
+        2. Parse the data into Event objects
+        3. Handle any errors gracefully
+        
+        Returns:
+            List[Event]: List of events from this source
+        """
+        pass 
