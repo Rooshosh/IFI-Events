@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from datetime import datetime
 
 from .models.event import Event
-from .db.session import DatabaseManager
+from .db.session import DatabaseManager, init_db
 from .utils.deduplication import (
     check_duplicate_before_insert,
     DuplicateConfig,
@@ -30,7 +30,7 @@ class NewEventHandler:
         self,
         db_manager: Optional[DatabaseManager] = None,
         config: Optional[DuplicateConfig] = None,
-        skip_merging: bool = True
+        skip_merging: bool = False
     ):
         """
         Initialize the handler.
@@ -43,8 +43,12 @@ class NewEventHandler:
             skip_merging: If True, all events will be inserted as new entries without
                         checking for duplicates or merging.
         """
+        # Initialize database first
+        init_db()
+        
+        # Then set up the handler
         self.db_manager = db_manager or DatabaseManager()
-        self.db_manager.init_db()
+        self.db_manager.setup_engine()  # Ensure engine is set up
         self.config = config or DuplicateConfig()
         self.skip_merging = skip_merging
     

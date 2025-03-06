@@ -17,6 +17,7 @@ from src.models.event import Event
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 from src.utils.timezone import now_oslo
+from src.new_event_handler import NewEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,16 @@ class PeoplyScraper(SyncScraper):
             return []
 
 if __name__ == "__main__":
+    import argparse
+    
+    # Default value for storing events in database
+    STORE_IN_DB = True
+    
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Fetch events from peoply.app')
+    parser.add_argument('--no-store', action='store_true', help='Do not store events in database')
+    args = parser.parse_args()
+    
     # Set up logging
     logging.basicConfig(
         level=logging.INFO,
@@ -140,5 +151,11 @@ if __name__ == "__main__":
         print(f"URL: {event.source_url}")
         if event.author:
             print(f"Organizer: {event.author}")
-        
+    
+    # Store events in database based on default value unless --no-store is provided
+    store_in_db = STORE_IN_DB and not args.no_store
+    if store_in_db and events:
+        handler = NewEventHandler()
+        new_count, updated_count = handler.process_new_events(events, scraper.name())
+        print(f"\nStored events: {new_count} new, {updated_count} updated")
 
