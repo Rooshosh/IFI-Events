@@ -1,5 +1,7 @@
 """Scraper for Facebook group posts using BrightData's API."""
 
+# TODO: Fix after system refactor in similar way to Peoply and Navet
+
 from datetime import datetime, timedelta
 import logging
 import time
@@ -100,8 +102,8 @@ class FacebookGroupScraper(BaseScraper):
         init_openai(self.openai_config['api_key'])
     
     def name(self) -> str:
-        """Return the name of the scraper."""
-        return SOURCES['facebook'].name
+        """Return the name of the scraper"""
+        return "Facebook (IFI-studenter)"
     
     def _extract_post_id(self, url: str) -> Optional[str]:
         """Extract the post ID from a Facebook post URL."""

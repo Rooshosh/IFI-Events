@@ -27,7 +27,7 @@ class ScraperRegistration:
 # Registry of available scrapers
 SOURCES = {
     'peoply': ScraperRegistration(
-        enabled=False,
+        enabled=True,
         scraper_class='src.scrapers.peoply.PeoplyScraper'
     ),
     'navet': ScraperRegistration(
