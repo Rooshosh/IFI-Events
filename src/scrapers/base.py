@@ -1,7 +1,6 @@
 """Base scraper class that all scrapers must inherit from."""
 
 from typing import List
-import json
 from ..models.event import Event
 
 class BaseScraper:

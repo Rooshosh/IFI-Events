@@ -5,8 +5,6 @@ import logging
 import json
 from .base import BaseScraper
 from ..models.event import Event
-from ..utils.cache import CacheManager, CacheConfig, CacheError
-from ..utils.decorators import cached_request, cached_method
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 from ..utils.timezone import now_oslo
@@ -16,15 +14,13 @@ logger = logging.getLogger(__name__)
 class PeoplyScraper(BaseScraper):
     """Scraper for peoply.app events"""
     
-    def __init__(self, cache_config: CacheConfig = None):
+    def __init__(self):
         self.base_url = "https://api.peoply.app"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             'Accept': 'application/json',
             'Accept-Language': 'en-US,en;q=0.5',
         }
-        self.cache_config = cache_config or CacheConfig()
-        self.cache_manager = CacheManager(self.cache_config.cache_dir)
     
     def name(self) -> str:
         return "peoply.app"
@@ -37,9 +33,8 @@ class PeoplyScraper(BaseScraper):
         encoded_time = time_str.replace(':', '%3A')
         return f"{self.base_url}/events?afterDate={encoded_time}&orderBy=startDate&take=99"
     
-    @cached_request(cache_key="events_list")
     def _fetch_json(self, url: str) -> str:
-        """Fetch JSON content with caching support"""
+        """Fetch JSON content"""
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         
@@ -53,10 +48,6 @@ class PeoplyScraper(BaseScraper):
             # Fetch events from API (using cache if available)
             api_url = self._get_api_url()
             raw_response = self._fetch_json(api_url)
-            
-            # Get the fetch timestamp from cache metadata
-            meta = self.cache_manager.get_metadata(self.name(), 'events_list')
-            fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
             
             api_events = json.loads(raw_response)
             logger.info(f"Found {len(api_events)} events from API")
@@ -77,7 +68,7 @@ class PeoplyScraper(BaseScraper):
                         location=api_event['locationName'],
                         source_url=f"https://peoply.app/events/{api_event['urlId']}",
                         source_name=self.name(),
-                        fetched_at=fetch_time
+                        fetched_at=now_oslo()
                     )
                     
                     # Add additional location details if available

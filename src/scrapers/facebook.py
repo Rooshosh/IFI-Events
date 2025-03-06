@@ -8,8 +8,6 @@ import requests
 import json
 from .base import BaseScraper
 from ..models.event import Event
-from ..utils.cache import CacheManager, CacheConfig, CacheError
-from ..utils.decorators import cached_request
 from ..utils.timezone import now_oslo, ensure_oslo_timezone
 from ..config.sources import SOURCES
 from ..utils.llm import init_openai, is_event_post, parse_event_details
@@ -27,7 +25,7 @@ class FacebookGroupScraper(BaseScraper):
     to identify and parse events from these posts.
     """
     
-    def __init__(self, cache_config: CacheConfig = None):
+    def __init__(self):
         # Get configuration from sources
         config = SOURCES['facebook']
         brightdata_config = config.settings['brightdata']
@@ -45,13 +43,11 @@ class FacebookGroupScraper(BaseScraper):
         self.group_url = brightdata_config['group_url']
         self.days_to_fetch = brightdata_config.get('days_to_fetch', 1)  # Default to 1 if not specified
         
-        self.cache_config = cache_config or CacheConfig()
-        self.cache_manager = CacheManager(self.cache_config.cache_dir)
         self.max_poll_attempts = 60  # Up to 1 hour total (60 attempts)
         self.poll_interval = 60  # seconds (1 minute)
         self.initial_wait = 90  # seconds
         
-        # Initialize OpenAI client (without caching)
+        # Initialize OpenAI client
         init_openai(openai_config['api_key'])
         self.openai_config = openai_config
     
@@ -100,55 +96,31 @@ class FacebookGroupScraper(BaseScraper):
             snapshot_id if successful, None otherwise.
         """
         try:
-            # Get date range in Oslo timezone
-            end_date = now_oslo()
-            start_date = end_date - timedelta(days=self.days_to_fetch - 1)
+            # Get existing event URLs to avoid re-scraping
+            existing_urls = self._get_event_urls_for_timeframe(self.days_to_fetch)
+            logger.info(f"Found {len(existing_urls)} existing events in the last {self.days_to_fetch} days")
             
-            # Format dates for API in MM-DD-YYYY format
-            start_date_str = start_date.strftime("%m-%d-%Y")
-            end_date_str = end_date.strftime("%m-%d-%Y")
+            # Prepare request data
+            data = {
+                "url": self.group_url,
+                "posts_limit": 50,  # Fetch up to 50 posts
+                "days_limit": self.days_to_fetch,  # Only fetch posts from last N days
+            }
             
-            # Get URLs from the specified timeframe and extract post IDs
-            urls = self._get_event_urls_for_timeframe(num_days=self.days_to_fetch)
-            posts_to_exclude = [self._extract_post_id(url) for url in urls if url and self._extract_post_id(url)]
-            
-            data = [
-                {
-                    "url": self.group_url,
-                    "start_date": start_date_str,
-                    "end_date": end_date_str,
-                    "posts_to_not_include": posts_to_exclude
-                }
-            ]
-            
-            # Debug logging
-            logger.info("Making request with:")
-            logger.info(f"URL: {self.base_url}/trigger")
-            logger.info(f"Headers: {self.headers}")
-            logger.info(f"Params: {self.params}")
-            logger.info(f"Data: {json.dumps(data, indent=2)}")
-            
+            # Make the request
             response = requests.post(
                 f"{self.base_url}/trigger",
                 headers=self.headers,
                 params=self.params,
                 json=data
             )
-            
-            # Debug response
-            logger.info(f"Response status: {response.status_code}")
-            logger.info(f"Response text: {response.text}")
-            
             response.raise_for_status()
-            result = response.json()
             
-            if "snapshot_id" in result:
-                logger.info(f"Successfully triggered scrape with snapshot_id: {result['snapshot_id']}")
-                return result["snapshot_id"]
-            else:
-                logger.error(f"No snapshot_id in response: {result}")
-                return None
-                
+            # Extract snapshot ID from response
+            snapshot_id = response.text.strip()
+            logger.info(f"Successfully triggered scrape with snapshot ID: {snapshot_id}")
+            return snapshot_id
+            
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
@@ -221,7 +193,6 @@ class FacebookGroupScraper(BaseScraper):
             logger.error(f"Error retrieving results for snapshot {snapshot_id}: {e}")
             raise
     
-    @cached_request(cache_key="latest_posts")
     def _fetch_posts(self, url: str = None, snapshot_id: str = None) -> str:
         """
         Fetch posts from the Facebook group.
@@ -260,106 +231,6 @@ class FacebookGroupScraper(BaseScraper):
         
         raise Exception("Scrape timed out or failed to retrieve results")
     
-    def _parse_post_to_event(self, post: Dict[str, Any]) -> Optional[Event]:
-        """
-        Use LLM to parse a Facebook post into an Event object.
-        Returns None if the post is not about an event.
-        """
-        # First check if this is an event post
-        content = post.get('content', '')
-        
-        # Add post date for correct date interpretation
-        enriched_content = (
-            f"Post metadata:\n"
-            f"- Posted on: {post.get('date_posted', '')}\n"
-            f"\nPost content:\n{content}"
-        )
-        
-        is_event, explanation = is_event_post(enriched_content, self.openai_config)
-        
-        if not is_event:
-            logger.debug(f"Post not detected as event: {explanation}")
-            return None
-        
-        # Parse event details with enriched content
-        event_data = parse_event_details(enriched_content, post.get('url', ''), self.openai_config)
-        if not event_data:
-            logger.error("Failed to parse event details")
-            return None
-            
-        # Create Event object
-        try:
-            # Convert datetime strings to datetime objects with timezone
-            start_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['start_time']))
-            end_time = None
-            if event_data.get('end_time'):
-                try:
-                    end_time = ensure_oslo_timezone(datetime.fromisoformat(event_data['end_time']))
-                except (ValueError, TypeError):
-                    # If end_time is invalid, keep it as None
-                    end_time = None
-            
-            # Get attachments (combine all relevant sources)
-            attachment = None
-            
-            # First try to get an image URL from attachments
-            if post.get('attachments'):
-                for att in post['attachments']:
-                    if isinstance(att, dict):
-                        # Prefer actual image URLs over Facebook event links
-                        if 'url' in att and 'attachment_url' not in att:  # Skip if it's a Facebook event
-                            attachment = att['url']
-                            break
-                        elif isinstance(att, str):
-                            attachment = att
-                            break
-            
-            # If no image found in attachments, try post_external_image
-            if not attachment and post.get('post_external_image'):
-                if isinstance(post['post_external_image'], dict) and 'url' in post['post_external_image']:
-                    attachment = post['post_external_image']['url']
-                elif isinstance(post['post_external_image'], str):
-                    attachment = post['post_external_image']
-            
-            # Finally, try post_external_link if no images found
-            if not attachment and post.get('post_external_link'):
-                attachment = post['post_external_link']
-            
-            # Convert post date to datetime with timezone
-            created_at = None
-            if post.get('date_posted'):
-                try:
-                    created_at = ensure_oslo_timezone(datetime.fromisoformat(post['date_posted']))
-                except (ValueError, TypeError):
-                    logger.warning(f"Failed to parse date_posted: {post.get('date_posted')}")
-            
-            event = Event(
-                title=event_data['title'],
-                description=event_data['description'],
-                start_time=start_time,
-                end_time=end_time,
-                location=event_data.get('location'),
-                source_url=post.get('url', ''),
-                source_name=self.name(),
-                author=post.get('user_username_raw'),  # Direct mapping from post author
-                attachment=attachment,  # Primary attachment URL
-                created_at=created_at  # Post creation date
-            )
-            
-            # Add food info to description if available
-            if event_data.get('food'):
-                event.description += f"\n\nServering: {event_data['food']}"
-            
-            # Add registration info to description if available
-            if event_data.get('registration_info'):
-                event.description += f"\n\nPåmelding: {event_data['registration_info']}"
-            
-            return event
-            
-        except Exception as e:
-            logger.error(f"Error creating Event object: {e}")
-            return None
-    
     def configure(self, config: Dict[str, Any]) -> None:
         """Configure scraper settings from dictionary."""
         if config is None:
@@ -384,7 +255,7 @@ class FacebookGroupScraper(BaseScraper):
         """
         try:
             logger.info(f"Fetching Facebook posts for the last {self.days_to_fetch} days")
-            # Fetch posts (using cache if available)
+            # Fetch posts
             posts_json = self._fetch_posts(
                 url=self.base_url + "/trigger",
                 snapshot_id=snapshot_id
@@ -422,45 +293,62 @@ class FacebookGroupScraper(BaseScraper):
             # Get URLs of events we already have in the database for this date range
             db = get_db()
             try:
-                # Use date() function on created_at for proper date comparison
-                events = db.query(Event).filter(
+                existing_events = db.query(Event).filter(
                     Event.source_name == self.name(),
-                    Event.created_at.isnot(None),  # Ensure we have a date
-                    func.date(Event.created_at) >= start_date,
-                    func.date(Event.created_at) <= end_date
+                    Event.start_time >= start_date,
+                    Event.start_time <= end_date + timedelta(days=1)
                 ).all()
-                known_urls = {event.source_url for event in events if event.source_url}
+                existing_urls = {event.source_url for event in existing_events if event.source_url}
+                logger.info(f"Found {len(existing_urls)} existing events in date range")
             finally:
                 db.close()
             
-            # Filter out posts we already have in our database
-            new_posts = [post for post in valid_posts if post.get('url') not in known_urls]
-            if len(new_posts) < len(valid_posts):
-                logger.info(f"Filtered out {len(valid_posts) - len(new_posts)} already known posts")
-                if not new_posts:
-                    logger.info("No new posts to process")
-                    return []
-            
-            # Get the fetch timestamp
-            meta = self.cache_manager.get_metadata(self.name(), 'latest_posts')
-            fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
-            
-            # Parse posts into events (only new ones)
+            # Process each post
             events = []
-            for post in new_posts:
+            for post in valid_posts:
                 try:
-                    event = self._parse_post_to_event(post)
-                    if event:
-                        event.fetched_at = fetch_time
-                        event.source_name = self.name()
+                    # Skip if we already have this event
+                    post_url = post.get('url')
+                    if post_url in existing_urls:
+                        logger.debug(f"Skipping already processed post: {post_url}")
+                        continue
+                    
+                    # Check if this is an event post
+                    if not is_event_post(post.get('text', '')):
+                        logger.debug(f"Post is not an event: {post_url}")
+                        continue
+                    
+                    # Parse event details
+                    event_details = parse_event_details(post.get('text', ''))
+                    if not event_details:
+                        logger.warning(f"Failed to parse event details from post: {post_url}")
+                        continue
+                    
+                    # Create event object
+                    event = Event(
+                        title=event_details.get('title', 'Untitled Event'),
+                        description=event_details.get('description', ''),
+                        start_time=event_details.get('start_time'),
+                        end_time=event_details.get('end_time'),
+                        location=event_details.get('location'),
+                        source_url=post_url,
+                        source_name=self.name(),
+                        fetched_at=now_oslo()
+                    )
+                    
+                    # Add to list if we have required fields
+                    if event.title and event.start_time:
                         events.append(event)
+                    else:
+                        logger.warning(f"Skipping event with missing required fields: {post_url}")
+                
                 except Exception as e:
-                    logger.error(f"Error parsing post: {e}")
+                    logger.error(f"Error processing post: {e}")
                     continue
             
-            logger.info(f"Found {len(events)} new events in {len(new_posts)} new posts")
+            logger.info(f"Successfully parsed {len(events)} events from {len(valid_posts)} posts")
             return events
             
         except Exception as e:
-            logger.error(f"Error fetching events from {self.name()}: {e}")
+            logger.error(f"Error fetching events from Facebook: {e}")
             return [] 

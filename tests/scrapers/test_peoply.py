@@ -8,6 +8,7 @@ import json
 
 from src.scrapers.peoply import PeoplyScraper
 from src.utils.cache import CacheConfig
+from src.models.event import Event
 
 # Set up logging
 logging.basicConfig(
@@ -26,16 +27,37 @@ def cache_config():
     )
 
 @pytest.fixture
-def peoply_scraper(cache_config):
-    """Provide a configured Peoply scraper instance."""
-    return PeoplyScraper(cache_config=cache_config)
+def peoply_scraper():
+    """Create a PeoplyScraper instance for testing"""
+    return PeoplyScraper()
 
 @pytest.mark.scraper
 def test_scraper_initialization(peoply_scraper):
     """Test that the scraper initializes correctly"""
     assert peoply_scraper.name() == "peoply.app"
     assert peoply_scraper.base_url == "https://api.peoply.app"
-    assert isinstance(peoply_scraper.cache_config, CacheConfig)
+
+@pytest.mark.scraper
+def test_api_url_generation(peoply_scraper):
+    """Test that the API URL is generated correctly"""
+    url = peoply_scraper._get_api_url()
+    assert url.startswith("https://api.peoply.app/events?afterDate=")
+    assert "orderBy=startDate" in url
+    assert "take=99" in url
+
+@pytest.mark.scraper
+@pytest.mark.live
+def test_event_fetching(peoply_scraper):
+    """Test that events can be fetched from the API"""
+    events = peoply_scraper.get_events()
+    assert isinstance(events, list)
+    if events:  # Only test event structure if we got any events
+        event = events[0]
+        assert isinstance(event, Event)
+        assert event.title
+        assert event.start_time
+        assert event.source_url
+        assert event.source_name == "peoply.app"
 
 @pytest.mark.scraper
 @pytest.mark.live

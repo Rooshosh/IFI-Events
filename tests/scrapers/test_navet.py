@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from src.scrapers.navet import NavetScraper
 from src.utils.cache import CacheConfig
+from src.models.event import Event
 
 # Set up logging
 logging.basicConfig(

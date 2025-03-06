@@ -7,14 +7,9 @@ import requests
 from bs4 import BeautifulSoup
 from zoneinfo import ZoneInfo
 from urllib.parse import urljoin, urlparse
-import os
-import json
-from pathlib import Path
 from .base import BaseScraper
 from ..models.event import Event
-from ..utils.cache import CacheConfig, CacheManager, CacheError
-from ..utils.decorators import cached_request, cached_method
-from ..utils.timezone import ensure_oslo_timezone
+from ..utils.timezone import ensure_oslo_timezone, now_oslo
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +41,19 @@ class NavetScraper(BaseScraper):
     - Analyze new features
     """
     
-    def __init__(self, cache_config: CacheConfig = None):
+    def __init__(self):
         self.base_url = "https://ifinavet.no"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         }
-        self.cache_config = cache_config or CacheConfig()
-        self.cache_manager = CacheManager(self.cache_config.cache_dir)
     
     def name(self) -> str:
         return "ifinavet.no"
     
-    @cached_request()
     def _fetch_html(self, url: str) -> str:
-        """Fetch HTML content with caching support"""
+        """Fetch HTML content"""
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         return response.text
@@ -119,7 +111,6 @@ class NavetScraper(BaseScraper):
         url_path = onclick.split("'")[1]
         return urljoin(self.base_url, url_path)
     
-    @cached_request()
     def _fetch_event_details(self, url: str) -> str:
         """Fetch event details page"""
         response = requests.get(url, headers=self.headers)
@@ -239,13 +230,9 @@ class NavetScraper(BaseScraper):
     def get_events(self) -> List[Event]:
         """Get events from ifinavet.no"""
         try:
-            # Fetch main page HTML (using cache if available)
+            # Fetch main page HTML
             url = f"{self.base_url}/arrangementer/2025/var/"
             html = self._fetch_html(url)
-            
-            # Get the fetch timestamp from cache metadata
-            meta = self.cache_manager.get_metadata(self.name(), 'arrangementer_2025_var')
-            fetch_time = datetime.fromisoformat(meta['cached_at']) if meta else now_oslo()
             
             # Process the HTML
             soup = BeautifulSoup(html, 'html.parser')
@@ -265,8 +252,8 @@ class NavetScraper(BaseScraper):
                 event = self._parse_event_card(event_card)
                 if event:
                     # Set the fetch time
-                    event.fetched_at = fetch_time
-                    # Fetch additional details for each event (using cache if available)
+                    event.fetched_at = now_oslo()
+                    # Fetch additional details for each event
                     details_html = self._fetch_html(event.source_url)
                     event = self._parse_event_details(event, details_html)
                     events.append(event)
@@ -369,38 +356,4 @@ class NavetScraper(BaseScraper):
         
         except Exception as e:
             logger.error(f"Error parsing event card: {e}")
-            return None
-    
-    def clear_cache(self, older_than_days: Optional[int] = None) -> int:
-        """
-        Clear the cache. If older_than_days is specified, only clear files older than that.
-        Returns the number of files cleared.
-        """
-        if not self.cache_config.cache_dir.exists():
-            return 0
-        
-        cleared_count = 0
-        for cache_file in self.cache_config.cache_dir.glob('*.html'):
-            should_clear = True
-            meta_file = self._get_cache_meta_path(cache_file)
-            
-            if older_than_days and meta_file.exists():
-                try:
-                    meta = json.loads(meta_file.read_text())
-                    fetched_at = datetime.fromisoformat(meta['fetched_at'])
-                    age = datetime.now() - fetched_at
-                    should_clear = age.days >= older_than_days
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    # If we can't read the metadata, clear the file
-                    pass
-            
-            if should_clear:
-                try:
-                    cache_file.unlink()
-                    if meta_file.exists():
-                        meta_file.unlink()
-                    cleared_count += 1
-                except OSError as e:
-                    logger.error(f"Error clearing cache file {cache_file}: {e}")
-        
-        return cleared_count 
+            return None 

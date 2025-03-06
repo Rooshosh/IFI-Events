@@ -60,11 +60,10 @@ import os
 # Add src directory to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.db import init_db, get_db, close_db
+from src.db.database import init_db, get_db, close_db
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.scrapers.facebook import FacebookGroupScraper
-from src.utils.cache import CacheConfig
 from src.models.event import Event
 from src.utils.timezone import now_oslo
 from src.utils.deduplication import check_duplicate_before_insert, deduplicate_database, DuplicateConfig
@@ -127,13 +126,12 @@ VALID_SOURCES = {
 # Source mapping for database operations - using the same mapping as VALID_SOURCES
 SOURCE_MAPPING = {k: v for k, v in VALID_SOURCES.items() if k != 'all'}
 
-def get_scraper(source: str, cache_config: CacheConfig):
+def get_scraper(source: str):
     """
     Get a scraper instance for the specified source.
     
     Args:
         source: Source identifier ('navet', 'peoply', or 'facebook')
-        cache_config: Configuration for the cache behavior
     
     Returns:
         An initialized scraper instance
@@ -142,28 +140,20 @@ def get_scraper(source: str, cache_config: CacheConfig):
         ValueError: If the source is not recognized
     """
     if source == 'navet':
-        return NavetScraper(cache_config=cache_config)
+        return NavetScraper()
     elif source == 'peoply':
-        return PeoplyScraper(cache_config=cache_config)
+        return PeoplyScraper()
     elif source == 'facebook':
-        return FacebookGroupScraper(cache_config=cache_config)
+        return FacebookGroupScraper()
     else:
         raise ValueError(f"Unknown source: {source}")
 
-def get_all_scrapers(cache_config: CacheConfig):
-    """
-    Get all available scrapers.
-    
-    Args:
-        cache_config: Configuration for the cache behavior
-    
-    Returns:
-        List of initialized scraper instances
-    """
+def get_all_scrapers():
+    """Get all available scrapers."""
     return [
-        PeoplyScraper(cache_config=cache_config),
-        NavetScraper(cache_config=cache_config),
-        FacebookGroupScraper(cache_config=cache_config)
+        PeoplyScraper(),
+        NavetScraper(),
+        FacebookGroupScraper()
     ]
 
 def print_events_info(events: List[Event], detailed: bool = False, source: Optional[str] = None, debug: bool = False):
@@ -184,7 +174,7 @@ def print_events_info(events: List[Event], detailed: bool = False, source: Optio
             
     # Show raw Facebook posts in debug mode
     if debug and source == 'facebook':
-        scraper = FacebookGroupScraper(CacheConfig())
+        scraper = FacebookGroupScraper()
         try:
             posts_json = scraper._fetch_posts()
             posts = json.loads(posts_json)
@@ -201,7 +191,6 @@ def print_events_info(events: List[Event], detailed: bool = False, source: Optio
 
 def fetch_events(
     source: Optional[str] = None,
-    use_cache: bool = True,
     store_db: bool = True,
     detailed_output: bool = False,
     quiet: bool = False,
@@ -214,7 +203,6 @@ def fetch_events(
     
     Args:
         source: Specific source to fetch from, or None for all sources
-        use_cache: Whether to use cached data (False means force live)
         store_db: Whether to store events in database (default True)
         detailed_output: Whether to print detailed event information
         quiet: Whether to reduce output verbosity
@@ -234,19 +222,8 @@ def fetch_events(
         logging.getLogger('src.db.database').setLevel(logging.WARNING)
         logger.setLevel(logging.WARNING)
     
-    # Force live fetch if snapshot_id is provided
-    if snapshot_id:
-        use_cache = False
-    
-    # Configure cache based on parameters
-    cache_config = CacheConfig(
-        cache_dir=Path(__file__).parent.parent / 'data' / 'cache',
-        enabled_sources=['peoply.app', 'ifinavet.no', 'facebook.group'],
-        force_live=not use_cache
-    )
-    
     # Get appropriate scrapers
-    scrapers = [get_scraper(source, cache_config)] if source else get_all_scrapers(cache_config)
+    scrapers = [get_scraper(source)] if source else get_all_scrapers()
     
     all_events = []
     total_stored = 0
@@ -256,77 +233,62 @@ def fetch_events(
     db = get_db() if store_db else None
     
     try:
+        # Process each scraper
         for scraper in scrapers:
             try:
-                if not use_cache and not quiet:
-                    logger.info(f"Fetching live data from {scraper.name()} (will update cache)")
-                elif not quiet:
-                    logger.info(f"Using cached data for {scraper.name()}")
+                # Configure Facebook scraper if needed
+                if isinstance(scraper, FacebookGroupScraper) and facebook_config:
+                    scraper.configure(facebook_config)
                 
-                # Handle Facebook scraper differently due to snapshot support
-                if isinstance(scraper, FacebookGroupScraper):
-                    # Configure Facebook scraper if settings provided
-                    if facebook_config:
-                        scraper.configure(facebook_config)
-                    events = scraper.get_events(snapshot_id=snapshot_id)
-                else:
-                    events = scraper.get_events()
+                # Fetch events from source
+                events = scraper.get_events(snapshot_id=snapshot_id)
                 
-                if not quiet:
-                    logger.info(f"Found {len(events)} events from {scraper.name()}")
-                all_events.extend(events)
+                if not events:
+                    logger.info(f"No events found from {scraper.name()}")
+                    continue
                 
-                # Store in database if enabled (default behavior)
-                if store_db:
+                logger.info(f"Found {len(events)} events from {scraper.name()}")
+                
+                if detailed_output:
                     for event in events:
-                        # Check for duplicates before adding
-                        duplicate = check_duplicate_before_insert(event)
-                        if duplicate:
-                            # Use the merged event instead
-                            db.merge(duplicate)
-                            total_merged += 1
-                            if not quiet:
-                                logger.info(f"Merged duplicate event: {event.title}")
-                        else:
-                            # Add new event
+                        logger.info(f"\nEvent: {event.title}")
+                        logger.info(f"Date: {event.start_time}")
+                        logger.info(f"URL: {event.source_url}")
+                
+                # Store events in database if requested
+                if store_db and db:
+                    for event in events:
+                        try:
                             db.add(event)
                             total_stored += 1
-                    
-                    if not quiet:
-                        logger.info(f"Processed {len(events)} events from {scraper.name()} "
-                                  f"({total_stored} new, {total_merged} merged)")
-                elif not quiet:
-                    logger.info("Events were not stored in database (--no-store flag used)")
+                        except Exception as e:
+                            logger.error(f"Error storing event {event.title}: {e}")
+                            if debug:
+                                logger.exception("Detailed error:")
                 
-                # Print detailed information if requested
-                if detailed_output and not quiet:
-                    print_events_info(events, detailed=True, source=source, debug=debug)
+                all_events.extend(events)
                 
-                # Add a newline after each source's summary
-                if not quiet:
-                    logger.info("")
-            
             except Exception as e:
-                logger.error(f"Error processing events from {scraper.name()}: {e}")
-                continue
+                logger.error(f"Error processing {scraper.name()}: {e}")
+                if debug:
+                    logger.exception("Detailed error:")
         
-        # Commit changes if we're storing events
-        if store_db:
-            db.commit()
-        
-        # Always show total summary, even in quiet mode
-        if store_db:
-            logger.warning(f"Total: Found {len(all_events)} events "
-                         f"({total_stored} new, {total_merged} merged)")
-        else:
-            logger.warning(f"Total: Found {len(all_events)} events (not stored in database)")
+        # Commit database changes if we're storing events
+        if store_db and db:
+            try:
+                db.commit()
+                logger.info(f"Stored {total_stored} new events")
+            except Exception as e:
+                logger.error(f"Error committing to database: {e}")
+                if debug:
+                    logger.exception("Detailed error:")
+                db.rollback()
         
         return all_events
-    
+        
     finally:
-        # Always close the database session if we opened one
-        if store_db:
-            close_db()
+        if db:
+            db.close()
 
 def get_event_by_id(event_id: int) -> Optional[Event]:
     """Get a single event from the database by ID"""
@@ -602,7 +564,6 @@ def main():
             for source in sources:
                 fetch_events(
                     source=source,
-                    use_cache=not args.live,
                     store_db=not args.no_store,
                     detailed_output=args.detailed,
                     quiet=args.quiet,
