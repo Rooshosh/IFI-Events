@@ -24,7 +24,7 @@ DEFAULT_BRIGHTDATA_CONFIG = {
     'days_to_fetch': 1,  # Default to fetching just today's posts
     'num_of_posts': 20,  # Safety limit on number of posts to fetch
     'webhook_base_url': 'https://9219-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
-    'webhook_endpoint': '/webhook/brightdata/results',
+    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_auth': os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER'),
     'webhook_format': 'json',
     'webhook_uncompressed': True,
