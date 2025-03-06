@@ -34,7 +34,7 @@ class NavetScraper(SyncScraper):
     # Default configuration
     BASE_URL = "https://ifinavet.no"
     DEFAULT_EVENT_DURATION = 2  # hours
-    FETCH_DETAILS = False  # Whether to fetch individual event detail pages
+    FETCH_DETAILS = True  # Whether to fetch individual event detail pages
     HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

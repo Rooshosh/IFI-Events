@@ -22,8 +22,8 @@ DEFAULT_BRIGHTDATA_CONFIG = {
     'api_key': os.getenv('BRIGHTDATA_API_KEY'),
     'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
     'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'days_to_fetch': 4,  # Default to fetching just today's posts
-    'num_of_posts': 20,  # Safety limit on number of posts to fetch
+    'days_to_fetch': 20,  # Default to fetching just today's posts
+    'num_of_posts': 200,  # Safety limit on number of posts to fetch
     'webhook_base_url': 'https://e5f0-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
     'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_auth': os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER'),
