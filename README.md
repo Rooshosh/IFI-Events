@@ -13,19 +13,9 @@ A Python application that aggregates and displays events from various UiO IFI (D
   - Navet (ifinavet.no) - Company presentations and career events
 - Smart caching system for efficient data retrieval
 - Automatic deduplication of events
-- Web interface to view upcoming events
+- FastAPI-based REST API
 - Timezone-aware event handling
 - PostgreSQL database with Supabase
-
-## Components
-
-The project consists of several key components:
-
-- **Event Scrapers**: Modules for fetching events from different sources (using BeautifulSoup4 and Requests)
-- **Web Interface**: Flask-based web application for viewing events
-- **CLI Tools**: Command-line tools for managing events and system maintenance
-- **Storage**: PostgreSQL database hosted on Supabase
-- **Test Suite**: Comprehensive tests for all components
 
 ## Quick Start
 
@@ -44,29 +34,71 @@ The project consists of several key components:
    cp .env.template .env
    ```
 
-3. Run in development mode:
+3. Run in development mode (with auto-reload):
    ```bash
-   FLASK_ENV=development python run.py
+   uvicorn src.api.main:app --reload --port 8000
    ```
 
-4. Run tests:
+4. Run in production mode (without auto-reload):
+   ```bash
+   uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+   ```
+
+5. Run tests:
    ```bash
    python -m unittest discover tests
    ```
 
-### Replit Deployment
+### Railway.app Deployment
 
-The application is configured to run on Replit:
+The application is configured for automatic deployment on Railway.app:
 
-1. Fork the repository on Replit
-2. Add your Supabase credentials in Replit Secrets
-3. Choose deployment mode in `.replit`:
-   ```toml
-   # For development:
-   run = "FLASK_ENV=development python run.py"
-   # For production:
-   # run = "python run.py"
+1. Push your code to GitHub
+2. Connect your GitHub repository to Railway.app
+3. Set up environment variables in Railway.app dashboard:
    ```
+   ENVIRONMENT=production
+   DATABASE_URL=your_supabase_url
+   ```
+4. Railway.app will automatically:
+   - Detect the Python project
+   - Install dependencies from `requirements.txt`
+   - Use the `Procfile` to start the application
+   - Set up environment variables
+   - Deploy your application
+
+The `Procfile` is configured for production:
+```
+web: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Environment Variables
+
+- `ENVIRONMENT`: Set to 'development' or 'production' (default: 'development')
+- `PORT`: Port to run the server on (default: 8000)
+- `DATABASE_URL`: PostgreSQL connection URL (required in production)
+
+## API Documentation
+
+When running in development mode, you can access:
+- Interactive API docs (Swagger UI): http://localhost:8000/docs
+- Alternative API docs (ReDoc): http://localhost:8000/redoc
+
+These are automatically disabled in production for security.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Components
+
+The project consists of several key components:
+
+- **Event Scrapers**: Modules for fetching events from different sources (using BeautifulSoup4 and Requests)
+- **Web Interface**: Flask-based web application for viewing events
+- **CLI Tools**: Command-line tools for managing events and system maintenance
+- **Storage**: PostgreSQL database hosted on Supabase
+- **Test Suite**: Comprehensive tests for all components
 
 ## Documentation
 
@@ -105,6 +137,20 @@ The application uses environment variables to configure different environments:
   - Uses 0.0.0.0
   - Production-ready error handling
 
-## Contributing
+## Running the Application
 
-Contributions are welcome! Please feel free to submit a Pull Request. 
+### Development Mode
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+### Production Mode
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Environment Variables
+- `ENVIRONMENT`: Set to 'development' or 'production' (default: 'development')
+- `PORT`: Port to run the server on (default: 8000)
+- `WORKERS`: Number of worker processes (default: 1)
+- `DATABASE_URL`: PostgreSQL connection URL (required in production) 

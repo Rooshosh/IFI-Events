@@ -18,15 +18,19 @@ def get_db_url():
     if os.environ.get('TESTING') == 'true':
         return "sqlite:///:memory:"
     
-    # Check if we're in development mode
-    if os.environ.get('FLASK_ENV') == 'development':
+    # Get environment setting, default to development if not set
+    environment = os.environ.get('ENVIRONMENT', 'development').strip()
+    
+    if environment.lower() == 'development':
         # Use SQLite for development
         return f"sqlite:///{DB_PATH}"
-    
-    # Production mode - use PostgreSQL
-    if not os.environ.get('DATABASE_URL'):
-        raise ValueError("DATABASE_URL environment variable is required for production mode")
-    return os.environ['DATABASE_URL']
+    elif environment.lower() == 'production':
+        # Production mode - use PostgreSQL
+        if not os.environ.get('DATABASE_URL'):
+            raise ValueError("DATABASE_URL environment variable is required for production mode")
+        return os.environ['DATABASE_URL']
+    else:
+        raise ValueError(f"Invalid environment setting: {environment}. Must be 'development' or 'production'")
 
 class DatabaseManager:
     """Manages database connections and sessions."""
@@ -108,4 +112,21 @@ class DatabaseManager:
             raise RuntimeError("cleanup_test_db() should only be called in test environment")
 
 # Create global instance
-db_manager = DatabaseManager() 
+db_manager = DatabaseManager()
+
+# Compatibility functions for simpler database access
+def init_db():
+    """Initialize database, creating all tables."""
+    db_manager.init_db()
+
+def get_db():
+    """Get a new database session."""
+    return db_manager.get_session()
+
+def close_db():
+    """Remove the current session."""
+    db_manager.close_session()
+
+def cleanup_test_db():
+    """Clean up test database. Should only be called in test environment."""
+    db_manager.cleanup_test_db() 
