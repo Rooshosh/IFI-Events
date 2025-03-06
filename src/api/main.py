@@ -8,7 +8,7 @@ import logging
 
 from ..db.session import db_manager, init_db
 from ..models.event import Event
-from .webhooks import router as webhook_router
+from ..webhooks.handlers.brightdata import router as brightdata_router
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -38,8 +38,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include webhook router
-app.include_router(webhook_router)
+# Include webhook routers
+app.include_router(brightdata_router)
 
 # Dependency to get DB session
 def get_db():

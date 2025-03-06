@@ -34,9 +34,9 @@ SOURCES = {
         enabled=True,
         scraper_class='src.scrapers.navet.NavetScraper'
     ),
-    # TODO: Facebook scraper has different setup and should not be used like this
+    # TODO: Maybe refactor since Facebook scraper is async, but can also just use like this
     'facebook': ScraperRegistration(
-        enabled=False,
+        enabled=True,
         scraper_class='src.scrapers.facebook.FacebookGroupScraper'
     )
 }
