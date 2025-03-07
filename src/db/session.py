@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 import os
 from pathlib import Path
 
-from .model import Base
+from ..models import Base
 
 # Database configuration
 DB_PATH = Path(__file__).parent.parent.parent / 'data' / 'events.db'

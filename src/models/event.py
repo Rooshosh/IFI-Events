@@ -7,7 +7,7 @@ from sqlalchemy.orm import validates
 from sqlalchemy import event as sa_event
 import json
 
-from ..db.model import Base
+from .base import Base
 from ..utils.timezone import ensure_oslo_timezone, DEFAULT_TIMEZONE, now_oslo
 
 class Event(Base):

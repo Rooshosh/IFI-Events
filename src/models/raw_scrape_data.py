@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 
-from ..db.model import Base
+from .base import Base
 from ..utils.timezone import ensure_oslo_timezone, now_oslo
 
 class RawScrapeData(Base):
