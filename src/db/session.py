@@ -14,9 +14,6 @@ DB_PATH = Path(__file__).parent.parent.parent / 'data' / 'events.db'
 
 def get_db_url():
     """Get database URL based on environment."""
-    # Check if we're in test environment
-    if os.environ.get('TESTING') == 'true':
-        return "sqlite:///:memory:"
     
     # Get environment setting, default to production if not set
     environment = os.environ.get('ENVIRONMENT', 'production').strip()
@@ -42,6 +39,7 @@ class DatabaseManager:
     
     def init_app(self, app=None):
         """Initialize database with Flask app (optional)."""
+        # TODO: Not using Flask app anymore
         self.setup_engine()
         if app:
             # Ensure db session is removed when the request ends
@@ -119,17 +117,6 @@ class DatabaseManager:
         """Close the current session and remove it from the registry."""
         if self.Session.registry.has():
             self.Session.remove()
-    
-    def cleanup_test_db(self):
-        """Clean up test database. Only for test environment."""
-        if os.environ.get('TESTING') == 'true':
-            self.Session.remove()
-            Base.metadata.drop_all(self.engine)
-            self.engine = None
-            self.setup_engine()
-            Base.metadata.create_all(self.engine)
-        else:
-            raise RuntimeError("cleanup_test_db() should only be called in test environment")
 
 # Create global instance
 db_manager = DatabaseManager()
@@ -146,7 +133,3 @@ def get_db():
 def close_db():
     """Remove the current session."""
     db_manager.close_session()
-
-def cleanup_test_db():
-    """Clean up test database. Should only be called in test environment."""
-    db_manager.cleanup_test_db() 
