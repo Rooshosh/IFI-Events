@@ -12,7 +12,7 @@ from pathlib import Path
 
 load_dotenv()
 
-from ..db.session import db_manager, init_db
+from ..db.database_manager import db_manager, init_db
 from ..models.event import Event
 from src.webhooks.routes import router as webhook_router
 from src.utils.logging_config import setup_logging

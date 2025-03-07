@@ -17,7 +17,7 @@ import json
 from zoneinfo import ZoneInfo
 import asyncio
 
-from src.db.session import get_db
+from src.db.database_manager import get_db
 from src.models.event import Event
 from src.new_event_handler import NewEventHandler
 from src.utils.data_processors.facebook_group_raw_data_processor import process_facebook_data

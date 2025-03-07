@@ -1,4 +1,4 @@
-"""Database session management with context support."""
+"""Database management and connection handling."""
 
 from contextlib import contextmanager
 from sqlalchemy import create_engine
@@ -132,4 +132,4 @@ def get_db():
 
 def close_db():
     """Remove the current session."""
-    db_manager.close_session()
+    db_manager.close_session() 

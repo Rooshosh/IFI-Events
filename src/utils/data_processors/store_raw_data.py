@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from src.models.raw_scrape_data import RawScrapeData
-from src.db.session import DatabaseManager
+from src.db.database_manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 from datetime import datetime
 
 from .models.event import Event
-from .db.session import DatabaseManager, init_db
+from .db.database_manager import DatabaseManager, init_db
 from .utils.deduplication import (
     check_duplicate_before_insert,
     DuplicateConfig,
