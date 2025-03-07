@@ -20,6 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def main():
+    # TODO: Make sequencial. So only 1 scraper is ran at a time.
     """Fetch and store events from all configured sources."""
     try:
         # Create source manager and get events first

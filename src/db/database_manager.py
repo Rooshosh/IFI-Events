@@ -9,6 +9,9 @@ from pathlib import Path
 
 from ..models import Base
 
+# TODO: Recreae entire database manager bc. of clutter between old and new code ??
+# TODO: Ensure db manager is global singleton ?
+
 # Database configuration
 DB_PATH = Path(__file__).parent.parent.parent / 'data' / 'events.db'
 

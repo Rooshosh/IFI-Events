@@ -47,6 +47,8 @@ class NewEventHandler:
         init_db()
         
         # Then set up the handler
+        # TODO: leave db setup to db manager ?
+        # -- shold only need to invokate a single db manager method, right ?
         self.db_manager = db_manager or DatabaseManager()
         self.db_manager.setup_engine()  # Ensure engine is set up
         self.config = config or DuplicateConfig()
