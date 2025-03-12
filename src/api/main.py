@@ -2,23 +2,24 @@
 
 from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 import subprocess
 from pathlib import Path
+import logging
 
 load_dotenv()
 
-from ..db.database_manager import db_manager, init_db
+from ..db import db, DatabaseError
 from ..models.event import Event
 from src.webhooks.routes import router as webhook_router
 from src.utils.logging_config import setup_logging
 
 # Set up logging
 setup_logging()
+logger = logging.getLogger(__name__)
 
 # Get environment setting
 environment = os.environ.get('ENVIRONMENT', 'development')
@@ -34,13 +35,14 @@ app = FastAPI(
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database only once during startup."""
+    """Initialize database and ensure tables exist."""
     try:
-        init_db()
+        # This will create tables if they don't exist
+        db.ensure_tables_exist()
+        logger.info("Database initialized successfully")
     except Exception as e:
-        print(f"Warning: Database initialization failed: {str(e)}")
-        # Don't raise the exception - allow the app to start even if DB init fails
-        # The first request will retry the initialization
+        logger.error(f"Database initialization failed: {e}")
+        # Don't raise - let the app start and retry on first request
 
 # Enable CORS with environment-specific settings
 app.add_middleware(
@@ -54,15 +56,6 @@ app.add_middleware(
 # Include routers
 app.include_router(webhook_router, prefix="/webhook", tags=["webhooks"])
 
-# Dependency to get DB session
-def get_db():
-    """Get a database session."""
-    db = db_manager.get_session()
-    try:
-        yield db
-    finally:
-        db_manager.close_session()
-
 # Test endpoint
 @app.get("/")
 async def root():
@@ -71,23 +64,33 @@ async def root():
 
 # Events endpoint
 @app.get("/events")
-async def get_events(db: Session = Depends(get_db)):
+async def get_events():
     """Get all future and ongoing events."""
-    now = datetime.now()
-    events = db.query(Event).filter(
-        (Event.start_time > now) |  # Future events
-        ((Event.start_time <= now) & (Event.end_time >= now))  # Ongoing events
-    ).order_by(Event.start_time).all()
-    return [event.to_dict() for event in events]
+    try:
+        with db.session() as session:
+            now = datetime.now()
+            events = session.query(Event).filter(
+                (Event.start_time > now) |  # Future events
+                ((Event.start_time <= now) & (Event.end_time >= now))  # Ongoing events
+            ).order_by(Event.start_time).all()
+            return [event.to_dict() for event in events]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 # Single event endpoint
 @app.get("/events/{event_id}")
-async def get_event(event_id: int, db: Session = Depends(get_db)):
+async def get_event(event_id: int):
     """Get a single event by ID."""
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    return event.to_dict()
+    try:
+        with db.session() as session:
+            event = session.query(Event).filter(Event.id == event_id).first()
+            if not event:
+                raise HTTPException(status_code=404, detail="Event not found")
+            return event.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 async def run_fetch_script():
     """Background task to run the fetch script."""
@@ -101,38 +104,34 @@ async def run_fetch_script():
             timeout=300  # 5 minute timeout
         )
         
-        # Log the output for debugging
-        if result.stdout:
-            print(f"Script output: {result.stdout}")
-        if result.stderr:
-            print(f"Script errors: {result.stderr}")
-            
         if result.returncode != 0:
-            print(f"Script failed with return code {result.returncode}")
+            raise Exception(f"Script failed with error: {result.stderr}")
             
     except subprocess.TimeoutExpired:
-        print("Script timed out after 5 minutes")
+        raise Exception("Script timed out after 5 minutes")
     except Exception as e:
-        print(f"Background fetch failed: {str(e)}")
+        raise Exception(f"Failed to run fetch script: {str(e)}")
 
-# Fetch trigger endpoint
 @app.post("/admin/fetch")
 async def trigger_fetch(
     background_tasks: BackgroundTasks,
     authorization: str = Header(...)
 ):
-    """Trigger a fetch of new events from all sources."""
-    expected_token = os.environ.get('ADMIN_API_KEY')
-    if not expected_token:
-        raise HTTPException(status_code=500, detail="Admin API key not configured")
+    """
+    Trigger a fetch of new events.
+    This endpoint is protected by an authorization header.
+    """
+    # Check authorization
+    if authorization != os.environ.get('ADMIN_API_KEY'):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization"
+        )
     
-    if authorization != f"Bearer {expected_token}":
-        raise HTTPException(status_code=401, detail="Invalid authorization token")
-    
-    # Add the fetch task to background tasks
+    # Add fetch task to background tasks
     background_tasks.add_task(run_fetch_script)
     
     return {
         "status": "success",
-        "message": "Fetch request received and processing started in background"
+        "message": "Fetch task started"
     } 
