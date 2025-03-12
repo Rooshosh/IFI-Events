@@ -8,7 +8,6 @@ import logging
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Header, Body, BackgroundTasks
 from fastapi.security import APIKeyHeader
-from sqlalchemy.orm import Session
 from datetime import datetime
 import os
 import hmac
@@ -17,9 +16,8 @@ import json
 from zoneinfo import ZoneInfo
 import asyncio
 
-from src.db.database_manager import get_db
 from src.models.event import Event
-from src.new_event_handler import NewEventHandler
+from src.new_event_handler import process_new_events
 from src.utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
 
 logger = logging.getLogger(__name__)
@@ -58,7 +56,7 @@ async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEAD
     
     return auth_header
 
-async def process_webhook_data(data: dict, db: Session):
+async def process_webhook_data(data: dict):
     """Process webhook data asynchronously."""
     try:
         # Check for "no posts" warning
@@ -75,9 +73,8 @@ async def process_webhook_data(data: dict, db: Session):
         # Process the data using the Facebook processor
         events = process_facebook_data(data)
         
-        # Store processed events using NewEventHandler
-        handler = NewEventHandler()  # Skip merging for now
-        new_count, updated_count = handler.process_new_events(events, "Facebook (IFI-studenter)")
+        # Store processed events
+        new_count, updated_count = process_new_events(events, "Facebook (IFI-studenter)")
         
         logger.info(f"Processed {len(events)} events: {new_count} new, {updated_count} updated")
         
@@ -89,8 +86,7 @@ async def process_webhook_data(data: dict, db: Session):
 async def handle_brightdata_facebook_group_webhook(
     background_tasks: BackgroundTasks,
     data: dict | list = Body(..., media_type="application/json"),
-    authorization: str = Header(..., alias="Authorization"),
-    db: Session = Depends(get_db)
+    authorization: str = Header(..., alias="Authorization")
 ):
     """
     Handle webhook results from BrightData's Facebook Group Scraper.
@@ -111,7 +107,7 @@ async def handle_brightdata_facebook_group_webhook(
                 logger.debug(json.dumps(next(iter(data.values())), indent=2) if data else "Empty dict")
         
         # Add processing task to background tasks
-        background_tasks.add_task(process_webhook_data, data, db)
+        background_tasks.add_task(process_webhook_data, data)
         
         # Return immediately
         return {
