@@ -29,7 +29,7 @@ if __name__ == "__main__":
 # Now we can use absolute imports
 from src.models.event import Event
 from src.scrapers.base import BaseScraper, SyncScraper, AsyncScraper
-from src.config.sources import get_enabled_sources, ScraperRegistration
+from src.config.data_sources import get_enabled_sources, ScraperRegistration
 
 logger = logging.getLogger(__name__)
 
