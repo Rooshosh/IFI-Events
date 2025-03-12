@@ -7,7 +7,7 @@ with proper configuration, connection pooling, and session handling.
 from contextlib import contextmanager
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Generator
 import os
 
 from sqlalchemy import create_engine, Engine
@@ -190,7 +190,7 @@ class Database:
             raise DatabaseError(f"Failed to initialize database schema: {e}") from e
     
     @contextmanager
-    def session(self) -> Session:
+    def session(self) -> Generator[Session, None, None]:
         """
         Provide a transactional scope around a series of operations.
         
