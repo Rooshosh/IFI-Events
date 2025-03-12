@@ -5,123 +5,75 @@ from typing import List, Optional, Tuple
 from datetime import datetime
 
 from .models.event import Event
-from .db.database_manager import DatabaseManager, init_db
+from .db import db, DatabaseError, with_retry
 from .utils.deduplication import (
     check_duplicate_before_insert,
-    DuplicateConfig,
-    merge_events,
-    are_events_duplicate
+    merge_events
 )
 
 logger = logging.getLogger(__name__)
 
-class NewEventHandler:
+@with_retry()
+def process_new_events(
+    events: List[Event],
+    source_name: str,
+    skip_merging: bool = False
+) -> Tuple[int, int]:
     """
-    Handles new event data from scrapers.
+    Process a list of new events, handling duplicates and database storage.
     
-    This class is responsible for:
-    1. Processing new events from scrapers
-    2. Checking for duplicates in the database (if enabled)
-    3. Merging duplicate events (if enabled)
-    4. Updating existing events or inserting new ones
+    This is a write operation that modifies the database, so we use retry logic.
+    
+    Args:
+        events: List of events to process
+        source_name: Source of the events (for logging and duplicate checking)
+        skip_merging: If True, events will be inserted without duplicate checking
+        
+    Returns:
+        Tuple of (new events added, events updated)
+        
+    Raises:
+        DatabaseError: If database operations fail
     """
+    if not events:
+        logger.info("No events to process")
+        return 0, 0
     
-    def __init__(
-        self,
-        db_manager: Optional[DatabaseManager] = None,
-        config: Optional[DuplicateConfig] = None,
-        skip_merging: bool = False
-    ):
-        """
-        Initialize the handler.
-        
-        Args:
-            db_manager: Optional database manager instance. If not provided,
-                       a new one will be created.
-            config: Optional configuration for duplicate detection. If not provided,
-                   default settings will be used.
-            skip_merging: If True, all events will be inserted as new entries without
-                        checking for duplicates or merging.
-        """
-        # Initialize database first
-        init_db()
-        
-        # Then set up the handler
-        # TODO: leave db setup to db manager ?
-        # -- shold only need to invokate a single db manager method, right ?
-        self.db_manager = db_manager or DatabaseManager()
-        self.db_manager.setup_engine()  # Ensure engine is set up
-        self.config = config or DuplicateConfig()
-        self.skip_merging = skip_merging
+    new_count = 0
+    update_count = 0
     
-    def process_new_events(self, events: List[Event], source_name: str) -> Tuple[int, int]:
-        """
-        Process new events from a scraper.
-        
-        For each event:
-        1. If skip_merging is True:
-           - Insert event as new entry
-        2. If skip_merging is False:
-           - Check if it's a duplicate of an existing event
-           - If duplicate, merge and update the existing event
-           - If new, insert it into the database
-        
-        Args:
-            events: List of new events from a scraper
-            source_name: Name of the source (e.g., "Peoply", "ifinavet.no")
-            
-        Returns:
-            Tuple of (new_events_count, updated_events_count)
-        """
-        new_count = 0
-        updated_count = 0
-        
-        with self.db_manager.session() as db:
+    try:
+        with db.session() as session:
             for event in events:
-                try:
-                    if self.skip_merging:
-                        # Skip deduplication/merging, insert all events as new
-                        db.add(event)
-                        new_count += 1
-                        logger.debug(f"Added new event (merging disabled): {event.title}")
-                    else:
-                        # Check for duplicates
-                        duplicate = check_duplicate_before_insert(event, self.config)
-                        if duplicate:
-                            # Merge and update existing event
-                            merged_event = merge_events(duplicate, event)
-                            self._update_existing_event(db, merged_event)
-                            updated_count += 1
-                            logger.debug(f"Updated existing event: {event.title}")
-                        else:
-                            # Insert new event
-                            db.add(event)
-                            new_count += 1
-                            logger.debug(f"Added new event: {event.title}")
-                except Exception as e:
-                    logger.error(f"Error processing event {event.title}: {e}")
+                # Set source name if not already set
+                if not event.source_name:
+                    event.source_name = source_name
+                
+                if skip_merging:
+                    session.add(event)
+                    new_count += 1
                     continue
-        
-        logger.info(f"Processed {len(events)} events from {source_name} "
-                   f"({new_count} new, {updated_count} updated)"
-                   + (" (merging disabled)" if self.skip_merging else ""))
-        
-        return new_count, updated_count
-    
-    def _update_existing_event(self, db, event: Event) -> None:
-        """
-        Update an existing event in the database.
-        
-        This method:
-        1. Updates the fetched_at timestamp
-        2. Merges the event into the database
-        
-        Args:
-            db: Database session
-            event: Event to update
-        """
-        # Update fetched_at timestamp
-        event.fetched_at = datetime.now()
-        
-        # Merge changes into database
-        db.merge(event) 
+                
+                # Check for duplicates
+                existing_event = check_duplicate_before_insert(event)
+                
+                if existing_event:
+                    # Merge and update existing event
+                    merged_event = merge_events(existing_event, event)
+                    for key, value in merged_event.__dict__.items():
+                        if not key.startswith('_'):
+                            setattr(existing_event, key, value)
+                    update_count += 1
+                    logger.info(f"Updated existing event: {existing_event.title}")
+                else:
+                    # Add new event
+                    session.add(event)
+                    new_count += 1
+                    logger.info(f"Added new event: {event.title}")
+            
+            logger.info(f"Processed {len(events)} events: {new_count} new, {update_count} updated")
+            return new_count, update_count
+            
+    except Exception as e:
+        logger.error(f"Error processing events: {e}")
+        raise DatabaseError(f"Failed to process events: {e}") from e 

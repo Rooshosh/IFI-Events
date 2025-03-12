@@ -13,7 +13,7 @@ import json
 
 from src.models.event import Event
 from src.utils.llm import is_event_post, parse_event_details, init_openai
-from src.utils.data_processors.db_store_raw_data import db_store_batch
+_store_raw_data import db_store_batch
 
 logger = logging.getLogger(__name__)
 
