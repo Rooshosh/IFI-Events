@@ -1,4 +1,4 @@
-"""Main FastAPI application module."""
+"""FastAPI application configuration module."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
 from src.config.cors import CORS_CONFIG
 from src.utils.logging_config import setup_logging
-from ..db import db
+from src.db import db
 from .routes import event_queries, event_fetch_trigger, brightdata_facebook_ifi_receiver
 
 # Set up logging
