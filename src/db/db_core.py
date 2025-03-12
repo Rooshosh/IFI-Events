@@ -1,0 +1,195 @@
+"""Core database functionality and configuration.
+
+This module provides a clean, modern implementation of database management
+with proper configuration, connection pooling, and session handling.
+"""
+
+from contextlib import contextmanager
+import logging
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+from sqlalchemy import create_engine, Engine
+from sqlalchemy.orm import scoped_session, sessionmaker, Session
+from sqlalchemy.pool import StaticPool
+
+from ..models import Base
+from ..models.event import Event  # noqa
+from ..models.raw_scrape_data import RawScrapeData  # noqa
+
+logger = logging.getLogger(__name__)
+
+class DatabaseConfig:
+    """Database configuration settings."""
+    
+    def __init__(
+        self,
+        environment: str = "development",
+        sqlite_path: Optional[Path] = None,
+        postgres_url: Optional[str] = None,
+        echo: bool = False,
+        pool_size: int = 2,
+        max_overflow: int = 5,
+        pool_timeout: int = 30,
+        pool_recycle: int = 1800,
+        pool_pre_ping: bool = True
+    ):
+        """
+        Initialize database configuration.
+
+        Args:
+            environment: Either 'development' or 'production'
+            sqlite_path: Path to SQLite database file (for development)
+            postgres_url: PostgreSQL connection URL (for production)
+            echo: Whether to echo SQL statements
+            pool_size: Size of the connection pool
+            max_overflow: Maximum number of connections to allow above pool_size
+            pool_timeout: Seconds to wait before giving up on getting a connection
+            pool_recycle: Seconds after which to recycle connections
+            pool_pre_ping: Whether to ping connections before using them
+        """
+        self.environment = environment.lower()
+        if self.environment not in ("development", "production"):
+            raise ValueError("Environment must be either 'development' or 'production'")
+        
+        # Set default SQLite path if none provided
+        if not sqlite_path and self.environment == "development":
+            sqlite_path = Path(__file__).parent.parent.parent / 'data' / 'events.db'
+        
+        self.sqlite_path = sqlite_path
+        self.postgres_url = postgres_url
+        self.echo = echo
+        self.pool_size = pool_size
+        self.max_overflow = max_overflow
+        self.pool_timeout = pool_timeout
+        self.pool_recycle = pool_recycle
+        self.pool_pre_ping = pool_pre_ping
+    
+    @property
+    def connection_url(self) -> str:
+        """Get the database connection URL based on environment."""
+        if self.environment == "development":
+            if not self.sqlite_path:
+                raise ValueError("SQLite path not configured")
+            return f"sqlite:///{self.sqlite_path}"
+        else:
+            if not self.postgres_url:
+                raise ValueError("PostgreSQL URL not configured")
+            return self.postgres_url
+    
+    def get_engine_args(self) -> Dict[str, Any]:
+        """Get SQLAlchemy engine arguments based on configuration."""
+        args = {"echo": self.echo}
+        
+        # SQLite-specific configuration
+        if self.environment == "development":
+            args["connect_args"] = {
+                "check_same_thread": False,
+                "detect_types": 3
+            }
+            args["poolclass"] = StaticPool
+        
+        # PostgreSQL-specific configuration
+        else:
+            args.update({
+                "pool_size": self.pool_size,
+                "max_overflow": self.max_overflow,
+                "pool_timeout": self.pool_timeout,
+                "pool_recycle": self.pool_recycle,
+                "pool_pre_ping": self.pool_pre_ping
+            })
+        
+        return args
+
+class DatabaseError(Exception):
+    """Base exception for database-related errors."""
+    pass
+
+class ConnectionError(DatabaseError):
+    """Raised when there are issues connecting to the database."""
+    pass
+
+class SessionError(DatabaseError):
+    """Raised when there are issues with database sessions."""
+    pass
+
+class Database:
+    """Core database management class implementing the singleton pattern."""
+    
+    _instance = None
+    
+    def __new__(cls, config: Optional[DatabaseConfig] = None):
+        """Ensure only one instance exists."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self, config: Optional[DatabaseConfig] = None):
+        """Initialize the database manager if not already initialized."""
+        if self._initialized:
+            return
+        
+        self.config = config or DatabaseConfig()
+        self.engine: Optional[Engine] = None
+        self._session_factory = sessionmaker()
+        self._scoped_session = scoped_session(self._session_factory)
+        self._initialized = True
+        
+        # Initialize engine on creation
+        self._setup_engine()
+    
+    def _setup_engine(self) -> None:
+        """Set up the SQLAlchemy engine."""
+        try:
+            self.engine = create_engine(
+                self.config.connection_url,
+                **self.config.get_engine_args()
+            )
+            self._session_factory.configure(bind=self.engine)
+        except Exception as e:
+            raise ConnectionError(f"Failed to create database engine: {e}") from e
+    
+    def init_db(self) -> None:
+        """Initialize the database schema."""
+        if not self.engine:
+            raise ConnectionError("Database engine not initialized")
+        
+        try:
+            # Create all tables
+            with self.engine.connect() as conn:
+                Base.metadata.create_all(conn)
+            logger.info("Database schema initialized successfully")
+        except Exception as e:
+            raise DatabaseError(f"Failed to initialize database schema: {e}") from e
+    
+    @contextmanager
+    def session(self) -> Session:
+        """
+        Provide a transactional scope around a series of operations.
+        
+        This is the preferred way to get a database session. It handles
+        commit/rollback automatically and ensures proper cleanup.
+        
+        Example:
+            with db.session() as session:
+                user = session.query(User).first()
+                user.name = "New Name"
+                # No need to call commit - it's handled automatically
+        
+        Raises:
+            SessionError: If there are issues with the session
+        """
+        session = self._scoped_session()
+        try:
+            yield session
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            raise SessionError(f"Database session error: {e}") from e
+        finally:
+            session.close()
+            self._scoped_session.remove()
+
+# Create the global database instance with default configuration
+db = Database() 

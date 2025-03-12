@@ -1,5 +1,32 @@
-"""Database package initialization."""
+"""Database package initialization.
 
-from .database_manager import init_db, get_db, close_db, db_manager
+This module exposes the public interface of the database package.
+"""
 
-__all__ = ['init_db', 'get_db', 'close_db', 'db_manager'] 
+from .db_core import (
+    Database,
+    DatabaseConfig,
+    DatabaseError,
+    ConnectionError,
+    SessionError,
+    db
+)
+from .operations import with_retry, execute_in_transaction
+
+__all__ = [
+    # Core database classes
+    'Database',
+    'DatabaseConfig',
+    
+    # Exceptions
+    'DatabaseError',
+    'ConnectionError',
+    'SessionError',
+    
+    # Global instance
+    'db',
+    
+    # Utilities
+    'with_retry',
+    'execute_in_transaction',
+] 
