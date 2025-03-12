@@ -128,14 +128,27 @@ The project uses SQLAlchemy ORM with PostgreSQL:
 
 The application uses environment variables to configure different environments:
 
-- `FLASK_ENV=development`: 
-  - Enables debug mode
-  - Uses localhost
-  - Shows detailed error pages
-- `FLASK_ENV` not set (production):
-  - Disables debug mode
-  - Uses 0.0.0.0
-  - Production-ready error handling
+- Development mode (default):
+  - Interactive API docs enabled
+  - SQLite database
+  - CORS allows all origins
+  - Detailed error responses
+
+- Production mode:
+  - API docs disabled
+  - PostgreSQL database (requires DATABASE_URL)
+  - CORS restricted to specific domains
+  - Limited error information for security
+
+To switch between modes, set the ENVIRONMENT variable:
+```bash
+# Development mode
+ENVIRONMENT=development
+
+# Production mode
+ENVIRONMENT=production
+DATABASE_URL=your_postgresql_url
+```
 
 ## Running the Application
 

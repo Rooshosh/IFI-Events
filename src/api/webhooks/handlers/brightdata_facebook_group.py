@@ -19,6 +19,7 @@ import asyncio
 from src.models.event import Event
 from src.new_event_handler import process_new_events
 from src.utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
+from src.config.external_services import verify_brightdata_auth
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEAD
     if not auth_header:
         raise HTTPException(status_code=401, detail="Missing authorization header")
     
-    if auth_header != os.environ.get('BRIGHTDATA_AUTHORIZATION_HEADER'):
+    if not verify_brightdata_auth(auth_header):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
     
     return auth_header

@@ -8,32 +8,14 @@ import json
 import logging
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
-import httpx
-from openai import OpenAI
 from zoneinfo import ZoneInfo
 
+from src.config.external_services.openai import (
+    OPENAI_CONFIG,
+    init_openai_client
+)
+
 logger = logging.getLogger(__name__)
-
-# Default LLM configuration
-DEFAULT_CONFIG = {
-    'model': 'gpt-4-turbo-preview',
-    'temperature': 0.3,
-    'max_tokens': 500
-}
-
-_client = None
-
-def init_openai(api_key: str) -> None:
-    """Initialize OpenAI client with API key."""
-    global _client
-    if _client is None:
-        # Create a custom httpx client without any proxy settings
-        http_client = httpx.Client(
-            base_url="https://api.openai.com/v1",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=30.0
-        )
-        _client = OpenAI(api_key=api_key, http_client=http_client)
 
 def _extract_json_from_response(response_text: str) -> Optional[Dict[str, Any]]:
     """Extract JSON from a response that might be wrapped in markdown code blocks."""
@@ -68,14 +50,16 @@ def is_event_post(
     
     Args:
         content: The text content to analyze
-        config: Optional LLM configuration. If not provided, uses DEFAULT_CONFIG
+        config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
     
     Returns:
         Tuple of (is_event: bool, explanation: str)
     """
     try:
-        config = config or DEFAULT_CONFIG
-        response = _client.chat.completions.create(
+        config = config or OPENAI_CONFIG.copy()
+        client = init_openai_client()
+        
+        response = client.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
             max_tokens=config['max_tokens'],
@@ -115,15 +99,17 @@ def parse_event_details(
     Args:
         content: The text content to analyze
         url: The URL of the post
-        config: Optional LLM configuration. If not provided, uses DEFAULT_CONFIG
+        config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
     
     Returns:
         Dictionary with event details or None if parsing fails
     """
     try:
-        config = config or DEFAULT_CONFIG
+        config = config or OPENAI_CONFIG.copy()
+        client = init_openai_client()
+        
         current_date = datetime.now().strftime("%Y-%m-%d")
-        response = _client.chat.completions.create(
+        response = client.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
             max_tokens=config['max_tokens'],

@@ -65,8 +65,10 @@ class FacebookGroupScraper(AsyncScraper):
         Raises:
             ValueError: If required environment variables or configuration values are missing or invalid
         """
+        from src.config.external_services import get_brightdata_config
+        
         # Initialize BrightData configuration
-        self.brightdata_config = DEFAULT_BRIGHTDATA_CONFIG.copy()
+        self.brightdata_config = get_brightdata_config()
         if brightdata_config:
             self.brightdata_config.update(brightdata_config)
         
