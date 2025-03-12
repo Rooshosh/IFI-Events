@@ -13,7 +13,7 @@ import json
 
 from src.models.event import Event
 from src.utils.llm import is_event_post, parse_event_details, init_openai
-from src.utils.data_processors.store_raw_data import RawDataHandler
+from src.utils.data_processors.db_store_raw_data import db_store_batch
 
 logger = logging.getLogger(__name__)
 
@@ -122,48 +122,23 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
         logger.error(f"Error creating event from post: {e}")
         raise
 
-def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
+def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
     """
-    Process BrightData webhook data containing Facebook posts.
-    
-    This function:
-    1. Analyzes each post using LLM to determine if it's an event
-    2. For posts identified as events, extracts detailed event information
-    3. Creates Event objects from the parsed information
-    4. Stores raw data with processing status
-    
-    Expected data format from BrightData:
-    {
-        "posts": [
-            {
-                "content": "Post content",
-                "date_posted": "2024-03-19T14:30:00",
-                "url": "https://facebook.com/...",
-                "user_username_raw": "Post author",
-                "post_external_title": "Optional external title",
-                ...
-            },
-            ...
-        ]
-    }
+    Process raw Facebook group data to extract events.
     
     Args:
-        data: The webhook payload from BrightData
+        data: Raw data from Facebook group scrape
         
     Returns:
-        List[Event]: List of parsed events
+        List[Event]: List of extracted events
     """
     try:
-        # Extract posts from the data
         posts = data.get('posts', [])
         if not posts:
             logger.warning("No posts found in data")
             return []
         
         logger.info(f"Processing {len(posts)} posts from Facebook")
-        
-        # Initialize raw data handler
-        raw_data_handler = RawDataHandler()
         
         # Process each post
         events: List[Event] = []
@@ -224,7 +199,7 @@ def process_facebook_data(data: Dict[str, Any]) -> List[Event]:
         # Store raw data entries
         if raw_data_entries:
             try:
-                raw_data_handler.store_batch('brightdata_facebook_group', raw_data_entries)
+                db_store_batch('brightdata_facebook_group', raw_data_entries)
             except Exception as e:
                 logger.error(f"Failed to store raw data: {e}")
                 # Continue processing even if storage fails

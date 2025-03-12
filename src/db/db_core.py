@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Generator
 import os
 
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import create_engine, Engine, inspect
 from sqlalchemy.orm import scoped_session, sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
@@ -143,6 +143,7 @@ class Database:
     """Core database management class implementing the singleton pattern."""
     
     _instance = None
+    _tables_checked = False
     
     def __new__(cls, config: Optional[DatabaseConfig] = None):
         """Ensure only one instance exists."""
@@ -189,6 +190,28 @@ class Database:
         except Exception as e:
             raise DatabaseError(f"Failed to initialize database schema: {e}") from e
     
+    def ensure_tables_exist(self) -> None:
+        """Ensure all required database tables exist."""
+        if not self._tables_checked:
+            if not self.engine:
+                raise ConnectionError("Database engine not initialized")
+            
+            try:
+                inspector = inspect(self.engine)
+                existing_tables = inspector.get_table_names()
+                required_tables = {table.__tablename__ for table in Base.__subclasses__()}
+                
+                if not all(table in existing_tables for table in required_tables):
+                    logger.info("Some tables missing, initializing database schema")
+                    with self.engine.connect() as conn:
+                        Base.metadata.create_all(conn)
+                    logger.info("Database schema initialized successfully")
+                
+                self._tables_checked = True
+                
+            except Exception as e:
+                raise DatabaseError(f"Failed to verify/create database schema: {e}") from e
+    
     @contextmanager
     def session(self) -> Generator[Session, None, None]:
         """
@@ -205,7 +228,11 @@ class Database:
         
         Raises:
             SessionError: If there are issues with the session
+            DatabaseError: If database schema verification fails
         """
+        # Ensure tables exist before providing a session
+        self.ensure_tables_exist()
+        
         session = self._scoped_session()
         try:
             yield session
