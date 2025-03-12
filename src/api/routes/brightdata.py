@@ -1,61 +1,20 @@
-"""Handler for BrightData Facebook Group Scraper webhook results.
-
-This endpoint receives Facebook group posts from BrightData's API
-and processes them into events.
-"""
+"""BrightData webhook routes for the FastAPI application."""
 
 import logging
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Header, Body, BackgroundTasks
-from fastapi.security import APIKeyHeader
-from datetime import datetime
-import os
-import hmac
-import hashlib
-import json
-from zoneinfo import ZoneInfo
-import asyncio
+from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Header, Body, BackgroundTasks
 
-from src.models.event import Event
-from src.new_event_handler import process_new_events
-from src.utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
-from src.config.external_services import verify_brightdata_auth
+from ...models.event import Event
+from ...new_event_handler import process_new_events
+from ...utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
+from ...config.external_services import verify_brightdata_auth
 
 logger = logging.getLogger(__name__)
 
-# Create router without prefix (it's handled by the main webhook router)
-router = APIRouter(tags=["brightdata_facebook_group"])
-
-# Security
-BRIGHTDATA_AUTH_HEADER = APIKeyHeader(name="Authorization")
-
-def verify_brightdata_signature(signature: str, payload: dict) -> bool:
-    """Verify the BrightData webhook signature."""
-    if not os.environ.get('BRIGHTDATA_AUTHORIZATION_HEADER'):
-        logger.warning("BRIGHTDATA_AUTHORIZATION_HEADER not set, skipping signature verification")
-        return True
-    
-    # Get the raw payload as string
-    payload_str = str(payload)
-    
-    # Calculate expected signature
-    expected_signature = hmac.new(
-        os.environ['BRIGHTDATA_AUTHORIZATION_HEADER'].encode(),
-        payload_str.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    return hmac.compare_digest(signature, expected_signature)
-
-async def verify_brightdata_auth(auth_header: str = Depends(BRIGHTDATA_AUTH_HEADER)):
-    """Verify the BrightData webhook authorization header"""
-    if not auth_header:
-        raise HTTPException(status_code=401, detail="Missing authorization header")
-    
-    if not verify_brightdata_auth(auth_header):
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
-    
-    return auth_header
+router = APIRouter(
+    prefix="/webhook/brightdata",
+    tags=["brightdata"]
+)
 
 async def process_webhook_data(data: dict):
     """Process webhook data asynchronously."""
@@ -83,7 +42,7 @@ async def process_webhook_data(data: dict):
         logger.error(f"Error processing webhook data: {e}")
         raise
 
-@router.post("/brightdata/facebook-group/results")
+@router.post("/facebook-group/results")
 async def handle_brightdata_facebook_group_webhook(
     background_tasks: BackgroundTasks,
     data: dict | list = Body(..., media_type="application/json"),
@@ -96,16 +55,19 @@ async def handle_brightdata_facebook_group_webhook(
     and processes them into events.
     """
     try:
+        # Verify authorization
+        if not verify_brightdata_auth(authorization):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authorization header"
+            )
+        
         # Log incoming data for debugging (only if DEBUG level is enabled)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Received webhook data:")
             logger.debug(f"Data type: {type(data)}")
             logger.debug(f"Data keys (if dict): {data.keys() if isinstance(data, dict) else 'N/A'}")
             logger.debug(f"Data length (if list): {len(data) if isinstance(data, list) else 'N/A'}")
-            if isinstance(data, list):
-                logger.debug(json.dumps(data[0], indent=2) if data else "Empty list")
-            else:
-                logger.debug(json.dumps(next(iter(data.values())), indent=2) if data else "Empty dict")
         
         # Add processing task to background tasks
         background_tasks.add_task(process_webhook_data, data)
