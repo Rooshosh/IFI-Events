@@ -1,11 +1,11 @@
-"""Admin router module."""
+"""Admin routes for the FastAPI application."""
 
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
 import os
 import subprocess
 from pathlib import Path
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 async def run_fetch_script():
     """Background task to run the fetch script."""
@@ -27,7 +27,7 @@ async def run_fetch_script():
     except Exception as e:
         raise Exception(f"Failed to run fetch script: {str(e)}")
 
-@router.post("/admin/fetch")
+@router.post("/fetch")
 async def trigger_fetch(
     background_tasks: BackgroundTasks,
     authorization: str = Header(...)
@@ -37,7 +37,7 @@ async def trigger_fetch(
     This endpoint is protected by an authorization header.
     """
     # Check authorization
-    if authorization != os.environ.get('ADMIN_API_KEY'):
+    if authorization != os.environ.get('CUSTOM_ADMIN_API_KEY'):
         raise HTTPException(
             status_code=401,
             detail="Invalid authorization"

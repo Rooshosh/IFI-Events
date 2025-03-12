@@ -1,16 +1,16 @@
-"""Events router module."""
+"""Events routes for the FastAPI application."""
 
-from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from typing import List, Dict
+from fastapi import APIRouter, HTTPException
+from typing import List, Dict, Any
 
 from ...db import db
 from ...models.event import Event
 
 router = APIRouter(tags=["events"])
 
-@router.get("/events", response_model=List[Dict])
-async def get_events():
+@router.get("/events")
+async def get_events() -> List[Dict[str, Any]]:
     """Get all future and ongoing events."""
     try:
         with db.session() as session:
@@ -23,8 +23,8 @@ async def get_events():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.get("/events/{event_id}", response_model=Dict)
-async def get_event(event_id: int):
+@router.get("/events/{event_id}")
+async def get_event(event_id: int) -> Dict[str, Any]:
     """Get a single event by ID."""
     try:
         with db.session() as session:
