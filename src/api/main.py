@@ -7,26 +7,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Internal imports
+# Internal imports - environment must be first
+from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+from src.utils.logging_config import setup_logging
 from ..db import db
 from .webhooks.routes import router as webhook_router
 from .routes.events import router as events_router
 from .routes.admin import router as admin_router
-from src.utils.logging_config import setup_logging
 
-# Environment configuration
-env_setting = os.environ.get('ENVIRONMENT', '').lower()
-IS_PRODUCTION_ENVIRONMENT = env_setting == 'production'
-
-if env_setting not in ['development', 'production']:
-    logging.warning(
-        f"Environment setting '{env_setting}' is invalid or not specified. "
-        "Expected 'development' or 'production'. Defaulting to development environment."
-    )
-
+# Constants and configurations
 ALLOWED_ORIGINS = {
     False: ["*"],  # Development - allow all
     True: [        # Production - restricted

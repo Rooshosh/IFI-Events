@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 from ..models import Base
 from ..models.event import Event  # noqa
 from ..models.raw_scrape_data import RawScrapeData  # noqa
+from ..config.environment import IS_PRODUCTION_ENVIRONMENT
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,6 @@ class DatabaseConfig:
     ):
         """
         Initialize database configuration.
-
-        The environment is determined from the ENVIRONMENT environment variable.
-        If not set or invalid, defaults to 'development'.
 
         In production environment, DATABASE_URL must be set in environment variables
         or provided explicitly via postgres_url parameter.
@@ -60,17 +58,8 @@ class DatabaseConfig:
             ValueError: If in production environment and no database URL is provided
                       either via postgres_url parameter or DATABASE_URL env variable
         """
-        # Get environment from env variable, default to development
-        self.environment = os.environ.get('ENVIRONMENT', 'development').lower().strip()
-        if self.environment not in ("development", "production"):
-            logger.warning(
-                f"Invalid ENVIRONMENT value: '{self.environment}'. "
-                "Defaulting to 'development'"
-            )
-            self.environment = "development"
-        
         # Handle database URLs based on environment
-        if self.environment == "production":
+        if IS_PRODUCTION_ENVIRONMENT:
             # For production, get URL from parameter or env variable
             self.postgres_url = postgres_url or os.environ.get('DATABASE_URL')
             if not self.postgres_url:
@@ -94,7 +83,7 @@ class DatabaseConfig:
     @property
     def connection_url(self) -> str:
         """Get the database connection URL based on environment."""
-        if self.environment == "development":
+        if not IS_PRODUCTION_ENVIRONMENT:
             if not self.sqlite_path:
                 raise ValueError("SQLite path not configured")
             return f"sqlite:///{self.sqlite_path}"
@@ -108,7 +97,7 @@ class DatabaseConfig:
         args = {"echo": self.echo}
         
         # SQLite-specific configuration
-        if self.environment == "development":
+        if not IS_PRODUCTION_ENVIRONMENT:
             args["connect_args"] = {
                 "check_same_thread": False,
                 "detect_types": 3

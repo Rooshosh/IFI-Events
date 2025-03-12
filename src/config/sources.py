@@ -3,10 +3,9 @@
 from dataclasses import dataclass
 from typing import Dict
 import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Internal imports - environment must be first
+from .environment import IS_PRODUCTION_ENVIRONMENT
 
 @dataclass
 class ScraperRegistration:

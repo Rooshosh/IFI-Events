@@ -12,12 +12,14 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 import os
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..models.event import Event
 from ..models.raw_scrape_data import RawScrapeData
+from ..config.environment import IS_PRODUCTION_ENVIRONMENT
 from . import db, with_retry, execute_in_transaction, DatabaseError, DatabaseConfig, Database
 
 logger = logging.getLogger(__name__)
@@ -25,21 +27,19 @@ logger = logging.getLogger(__name__)
 # Example 0: Database Configuration
 def configure_database():
     """Example of different database configuration options."""
-    # Default configuration (development with SQLite)
+    # Default configuration (uses IS_PRODUCTION_ENVIRONMENT to determine database type)
     default_db = Database()
     
-    # Production configuration (using environment variable)
-    os.environ['ENVIRONMENT'] = 'production'
-    os.environ['DATABASE_URL'] = 'postgresql://user:pass@host:5432/db'
-    prod_db = Database()
-    
-    # Custom configuration
+    # Custom configuration for special cases
     custom_config = DatabaseConfig(
-        # URL provided directly instead of from environment
+        # Override default SQLite path for development
+        sqlite_path=Path('custom/path/events.db'),
+        # Or override PostgreSQL URL for production
         postgres_url='postgresql://user:pass@host:5432/db',
-        # Customize pool settings if needed
+        # Customize connection pool settings
         pool_size=5,
-        max_overflow=7
+        max_overflow=7,
+        pool_timeout=60
     )
     custom_db = Database(config=custom_config)
 
@@ -123,7 +123,7 @@ def get_random_event() -> Optional[Event]:
     """Example of using raw SQL when needed."""
     with db.session() as session:
         # Use database-appropriate random function
-        if db.config.environment == "development":
+        if not IS_PRODUCTION_ENVIRONMENT:
             # SQLite
             return session.query(Event).order_by(text('RANDOM()')).first()
         else:
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     # These examples won't actually run, they're just for demonstration
     
     # Configure database based on environment
-    if os.environ.get('ENVIRONMENT') == 'production':
+    if IS_PRODUCTION_ENVIRONMENT:
         # Production uses PostgreSQL from DATABASE_URL
         db = Database()
     else:
