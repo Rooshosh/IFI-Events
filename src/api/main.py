@@ -10,7 +10,7 @@ from src.config.environment import IS_PRODUCTION_ENVIRONMENT
 from src.config.cors import CORS_CONFIG
 from src.utils.logging_config import setup_logging
 from ..db import db
-from .routes import events, admin, brightdata
+from .routes import event_queries, event_fetch_trigger, brightdata_facebook_ifi_receiver
 
 # Set up logging
 setup_logging()
@@ -44,9 +44,9 @@ def create_application() -> FastAPI:
     app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 
     # Include routers
-    app.include_router(events.router)
-    app.include_router(admin.router)
-    app.include_router(brightdata.router)
+    app.include_router(event_queries.router)
+    app.include_router(event_fetch_trigger.router)
+    app.include_router(brightdata_facebook_ifi_receiver.router)
 
     @app.get("/", tags=["health"])
     async def root():

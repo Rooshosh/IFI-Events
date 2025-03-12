@@ -1,4 +1,4 @@
-"""Events routes for the FastAPI application."""
+"""Event query routes for the FastAPI application."""
 
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
@@ -10,7 +10,7 @@ from ...models.event import Event
 router = APIRouter(tags=["events"])
 
 @router.get("/events")
-async def get_events() -> List[Dict[str, Any]]:
+async def get_active_events() -> List[Dict[str, Any]]:
     """Get all future and ongoing events."""
     try:
         with db.session() as session:
@@ -24,7 +24,7 @@ async def get_events() -> List[Dict[str, Any]]:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/events/{event_id}")
-async def get_event(event_id: int) -> Dict[str, Any]:
+async def get_event_by_id(event_id: int) -> Dict[str, Any]:
     """Get a single event by ID."""
     try:
         with db.session() as session:

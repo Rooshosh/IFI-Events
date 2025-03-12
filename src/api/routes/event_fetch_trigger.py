@@ -1,4 +1,4 @@
-"""Admin routes for the FastAPI application."""
+"""Routes for triggering event fetches from external sources."""
 
 import os
 import subprocess
@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-async def run_fetch_script():
-    """Background task to run the fetch script."""
+async def execute_fetch_script():
+    """Execute the script that fetches events from all sources."""
     try:
         script_path = Path(__file__).parent.parent.parent.parent / 'scripts' / 'get_new_data.py'
         # Run the script with a timeout to prevent hanging
@@ -27,13 +27,13 @@ async def run_fetch_script():
     except Exception as e:
         raise Exception(f"Failed to run fetch script: {str(e)}")
 
-@router.post("/fetch")
-async def trigger_fetch(
+@router.post("/trigger-fetch")
+async def trigger_event_fetch(
     background_tasks: BackgroundTasks,
     authorization: str = Header(...)
 ):
     """
-    Trigger a fetch of new events.
+    Trigger a fetch of events from all external sources.
     This endpoint is protected by an authorization header.
     """
     # Check authorization
@@ -44,9 +44,9 @@ async def trigger_fetch(
         )
     
     # Add fetch task to background tasks
-    background_tasks.add_task(run_fetch_script)
+    background_tasks.add_task(execute_fetch_script)
     
     return {
         "status": "success",
-        "message": "Fetch task started"
+        "message": "Event fetch triggered successfully"
     } 
