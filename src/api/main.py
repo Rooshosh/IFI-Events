@@ -1,30 +1,25 @@
 """Main FastAPI application module."""
 
-from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List
-from datetime import datetime
-import os
-from dotenv import load_dotenv
-import subprocess
-from pathlib import Path
 import logging
+import os
+from pathlib import Path
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-from ..db import db, DatabaseError
-from ..models.event import Event
-from src.webhooks.routes import router as webhook_router
+# Internal imports
+from ..db import db
+from .webhooks.routes import router as webhook_router
+from .routes.events import router as events_router
+from .routes.admin import router as admin_router
 from src.utils.logging_config import setup_logging
 
-# Set up logging
-setup_logging()
-logger = logging.getLogger(__name__)
+# Constants and configurations
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
 
-# Get environment setting
-environment = os.environ.get('ENVIRONMENT', 'development')
-
-# CORS configuration
 ALLOWED_ORIGINS = {
     'development': ["*"],  # Allow all in development
     'production': [
@@ -46,45 +41,60 @@ ALLOWED_HEADERS = [
     "Accept",        # For content negotiation
 ]
 
-app = FastAPI(
-    title="IFI Events API",
-    description="API for managing and processing events from various sources",
-    version="1.0.0",
-    docs_url=None if environment == 'production' else '/docs',  # Disable docs in production
-    redoc_url=None if environment == 'production' else '/redoc'  # Disable redoc in production
-)
+# Set up logging
+setup_logging()
+logger = logging.getLogger(__name__)
+
+def create_application() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title="IFI Events API",
+        description="API for managing and processing events from various sources",
+        version="1.0.0",
+        docs_url=None if ENVIRONMENT == 'production' else '/docs',
+        redoc_url=None if ENVIRONMENT == 'production' else '/redoc'
+    )
+
+    # Configure CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS[ENVIRONMENT],
+        allow_credentials=True,
+        allow_methods=ALLOWED_METHODS,
+        allow_headers=ALLOWED_HEADERS,
+        expose_headers=[],
+        max_age=3600,
+    )
+
+    # Include routers
+    app.include_router(events_router, tags=["events"])
+    app.include_router(admin_router, tags=["admin"])
+    app.include_router(webhook_router, prefix="/webhook", tags=["webhooks"])
+
+    @app.get("/", tags=["health"])
+    async def root():
+        """Health check endpoint."""
+        return {
+            "status": "healthy",
+            "environment": ENVIRONMENT,
+            "version": app.version
+        }
+
+    return app
+
+# Create the application instance
+app = create_application()
 
 # Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and ensure tables exist."""
     try:
-        # This will create tables if they don't exist
         db.ensure_tables_exist()
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         # Don't raise - let the app start and retry on first request
-
-# Enable CORS with environment-specific settings
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS[environment],
-    allow_credentials=True,  # Allow cookies/auth headers
-    allow_methods=ALLOWED_METHODS,
-    allow_headers=ALLOWED_HEADERS,
-    expose_headers=[],  # No need to expose any headers
-    max_age=3600,  # Cache preflight requests for 1 hour
-)
-
-# Include routers
-app.include_router(webhook_router, prefix="/webhook", tags=["webhooks"])
-
-# Test endpoint
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {"message": "Welcome to the IFI Events API"}
 
 # Events endpoint
 @app.get("/events")
