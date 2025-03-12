@@ -24,13 +24,6 @@ if not api_key:
 else:
     init_openai(api_key)
 
-# LLM configuration
-LLM_CONFIG = {
-    'model': 'gpt-4-turbo-preview',
-    'temperature': 0.3,
-    'max_tokens': 500
-}
-
 def _parse_post_date(date_str: str) -> Optional[datetime]:
     """
     Parse a post's date string into a datetime object.
@@ -156,14 +149,14 @@ def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
                 url = post.get('url', '')
                 
                 # First, determine if this is an event
-                is_event, event_explanation = is_event_post(content, LLM_CONFIG)
+                is_event, event_explanation = is_event_post(content)
                 
                 # Set processing status based on event detection
                 processing_status = 'success' if is_event else 'not_an_event'
                 
                 # If it's an event, extract detailed information
                 if is_event:
-                    event_details = parse_event_details(content, url, LLM_CONFIG)
+                    event_details = parse_event_details(content, url)
                     if event_details:
                         try:
                             # Create event object
