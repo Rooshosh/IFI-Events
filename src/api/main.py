@@ -24,6 +24,28 @@ logger = logging.getLogger(__name__)
 # Get environment setting
 environment = os.environ.get('ENVIRONMENT', 'development')
 
+# CORS configuration
+ALLOWED_ORIGINS = {
+    'development': ["*"],  # Allow all in development
+    'production': [
+        "https://ifi.events",          # Main frontend
+        "https://www.ifi.events",      # With www
+        "https://api.ifi.events",      # API domain
+    ]
+}
+
+ALLOWED_METHODS = [
+    "GET",      # For fetching events
+    "POST",     # For webhooks and admin endpoints
+    "OPTIONS"   # Required for CORS preflight
+]
+
+ALLOWED_HEADERS = [
+    "Authorization",  # For admin endpoints
+    "Content-Type",   # For request bodies
+    "Accept",        # For content negotiation
+]
+
 app = FastAPI(
     title="IFI Events API",
     description="API for managing and processing events from various sources",
@@ -47,10 +69,12 @@ async def startup_event():
 # Enable CORS with environment-specific settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if environment == 'development' else [],  # Restrict CORS in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS[environment],
+    allow_credentials=True,  # Allow cookies/auth headers
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
+    expose_headers=[],  # No need to expose any headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Include routers
