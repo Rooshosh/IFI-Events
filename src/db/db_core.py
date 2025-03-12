@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
+import os
 
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import scoped_session, sessionmaker, Session
@@ -24,40 +25,65 @@ class DatabaseConfig:
     
     def __init__(
         self,
-        environment: str = "development",
         sqlite_path: Optional[Path] = None,
         postgres_url: Optional[str] = None,
         echo: bool = False,
-        pool_size: int = 2,
-        max_overflow: int = 5,
+        pool_size: int = 3,
+        max_overflow: int = 4,
         pool_timeout: int = 30,
-        pool_recycle: int = 1800,
+        pool_recycle: int = 3600,
         pool_pre_ping: bool = True
     ):
         """
         Initialize database configuration.
 
+        The environment is determined from the ENVIRONMENT environment variable.
+        If not set or invalid, defaults to 'development'.
+
+        In production environment, DATABASE_URL must be set in environment variables
+        or provided explicitly via postgres_url parameter.
+
         Args:
-            environment: Either 'development' or 'production'
             sqlite_path: Path to SQLite database file (for development)
             postgres_url: PostgreSQL connection URL (for production)
+                        If not provided, will use DATABASE_URL env variable
             echo: Whether to echo SQL statements
-            pool_size: Size of the connection pool
-            max_overflow: Maximum number of connections to allow above pool_size
-            pool_timeout: Seconds to wait before giving up on getting a connection
-            pool_recycle: Seconds after which to recycle connections
+            pool_size: Size of the connection pool (permanent connections)
+            max_overflow: Maximum number of extra connections to allow temporarily
+                        (total connections = pool_size + max_overflow)
+            pool_timeout: Seconds to wait for an available connection
+            pool_recycle: Seconds before connections are recycled (prevent stale)
             pool_pre_ping: Whether to ping connections before using them
+                         (helps prevent using stale connections)
+
+        Raises:
+            ValueError: If in production environment and no database URL is provided
+                      either via postgres_url parameter or DATABASE_URL env variable
         """
-        self.environment = environment.lower()
+        # Get environment from env variable, default to development
+        self.environment = os.environ.get('ENVIRONMENT', 'development').lower().strip()
         if self.environment not in ("development", "production"):
-            raise ValueError("Environment must be either 'development' or 'production'")
+            logger.warning(
+                f"Invalid ENVIRONMENT value: '{self.environment}'. "
+                "Defaulting to 'development'"
+            )
+            self.environment = "development"
         
-        # Set default SQLite path if none provided
-        if not sqlite_path and self.environment == "development":
-            sqlite_path = Path(__file__).parent.parent.parent / 'data' / 'events.db'
+        # Handle database URLs based on environment
+        if self.environment == "production":
+            # For production, get URL from parameter or env variable
+            self.postgres_url = postgres_url or os.environ.get('DATABASE_URL')
+            if not self.postgres_url:
+                raise ValueError(
+                    "Database URL must be provided either via postgres_url parameter "
+                    "or DATABASE_URL environment variable when in production environment"
+                )
+            self.sqlite_path = None
+        else:
+            # For development, handle SQLite path
+            self.postgres_url = None
+            self.sqlite_path = sqlite_path or Path(__file__).parent.parent.parent / 'data' / 'events.db'
         
-        self.sqlite_path = sqlite_path
-        self.postgres_url = postgres_url
         self.echo = echo
         self.pool_size = pool_size
         self.max_overflow = max_overflow
