@@ -2,18 +2,38 @@
 
 import logging
 import os
+import subprocess
+from datetime import datetime
 from pathlib import Path
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
 # Internal imports - environment must be first
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
 from src.utils.logging_config import setup_logging
 from ..db import db
+from ..models.event import Event
 from .webhooks.routes import router as webhook_router
 from .routes.events import router as events_router
 from .routes.admin import router as admin_router
+
+# Set up logging
+setup_logging()
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    try:
+        db.ensure_tables_exist()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+    yield
+    # Shutdown
+    # Add cleanup here if needed
 
 # Constants and configurations
 ALLOWED_ORIGINS = {
@@ -37,10 +57,6 @@ ALLOWED_HEADERS = [
     "Accept",        # For content negotiation
 ]
 
-# Set up logging
-setup_logging()
-logger = logging.getLogger(__name__)
-
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
@@ -48,7 +64,8 @@ def create_application() -> FastAPI:
         description="API for managing and processing events from various sources",
         version="1.0.0",
         docs_url=None if IS_PRODUCTION_ENVIRONMENT else '/docs',
-        redoc_url=None if IS_PRODUCTION_ENVIRONMENT else '/redoc'
+        redoc_url=None if IS_PRODUCTION_ENVIRONMENT else '/redoc',
+        lifespan=lifespan
     )
 
     # Configure CORS
@@ -80,17 +97,6 @@ def create_application() -> FastAPI:
 
 # Create the application instance
 app = create_application()
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and ensure tables exist."""
-    try:
-        db.ensure_tables_exist()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {e}")
-        # Don't raise - let the app start and retry on first request
 
 # Events endpoint
 @app.get("/events")
