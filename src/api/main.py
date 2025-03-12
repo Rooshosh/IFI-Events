@@ -17,12 +17,19 @@ from .routes.events import router as events_router
 from .routes.admin import router as admin_router
 from src.utils.logging_config import setup_logging
 
-# Constants and configurations
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
+# Environment configuration
+env_setting = os.environ.get('ENVIRONMENT', '').lower()
+IS_PRODUCTION_ENVIRONMENT = env_setting == 'production'
+
+if env_setting not in ['development', 'production']:
+    logging.warning(
+        f"Environment setting '{env_setting}' is invalid or not specified. "
+        "Expected 'development' or 'production'. Defaulting to development environment."
+    )
 
 ALLOWED_ORIGINS = {
-    'development': ["*"],  # Allow all in development
-    'production': [
+    False: ["*"],  # Development - allow all
+    True: [        # Production - restricted
         "https://ifi.events",          # Main frontend
         "https://www.ifi.events",      # With www
         "https://api.ifi.events",      # API domain
@@ -51,14 +58,14 @@ def create_application() -> FastAPI:
         title="IFI Events API",
         description="API for managing and processing events from various sources",
         version="1.0.0",
-        docs_url=None if ENVIRONMENT == 'production' else '/docs',
-        redoc_url=None if ENVIRONMENT == 'production' else '/redoc'
+        docs_url=None if IS_PRODUCTION_ENVIRONMENT else '/docs',
+        redoc_url=None if IS_PRODUCTION_ENVIRONMENT else '/redoc'
     )
 
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS[ENVIRONMENT],
+        allow_origins=ALLOWED_ORIGINS[IS_PRODUCTION_ENVIRONMENT],
         allow_credentials=True,
         allow_methods=ALLOWED_METHODS,
         allow_headers=ALLOWED_HEADERS,
@@ -76,7 +83,7 @@ def create_application() -> FastAPI:
         """Health check endpoint."""
         return {
             "status": "healthy",
-            "environment": ENVIRONMENT,
+            "environment": "production" if IS_PRODUCTION_ENVIRONMENT else "development",
             "version": app.version
         }
 
