@@ -3,11 +3,11 @@ builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 2"
+startCommand = "uvicorn src.api.app:app --host 0.0.0.0 --port $PORT --workers 2"
 healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "on_failure"
 
-[[cron]]
-schedule = "0 */6 * * *"
-command = "python scripts/get_new_data.py" 
+# [[cron]]
+# schedule = "0 */6 * * *"
+# command = "python scripts/get_new_data.py" 

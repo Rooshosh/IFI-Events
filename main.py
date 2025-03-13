@@ -20,8 +20,6 @@ if __name__ == "__main__":
             host="0.0.0.0",
             port=8000,
             reload=False,
-            workers=4,
-            log_level="info",
-            proxy_headers=True,
-            forwarded_allow_ips="*"
+            workers=2,  # Match Railway's configuration
+            log_level="info"
         )
