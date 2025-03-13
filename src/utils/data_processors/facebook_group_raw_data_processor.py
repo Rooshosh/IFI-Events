@@ -12,17 +12,10 @@ import os
 import json
 
 from src.models.event import Event
-from src.utils.llm import is_event_post, parse_event_details, init_openai
+from src.utils.llm import is_event_post, parse_event_details
 from src.utils.data_processors.db_store_raw_data import db_store_batch
 
 logger = logging.getLogger(__name__)
-
-# Initialize LLM client
-api_key = os.environ.get('OPENAI_API_KEY')
-if not api_key:
-    logger.error("OPENAI_API_KEY environment variable not set")
-else:
-    init_openai(api_key)
 
 def _parse_post_date(date_str: str) -> Optional[datetime]:
     """

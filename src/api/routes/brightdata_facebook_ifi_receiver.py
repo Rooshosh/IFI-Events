@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Header, Body, BackgroundTasks
 
 from ...models.event import Event
 from ...new_event_handler import process_new_events
-from ...utils.data_processors.facebook_group_raw_data_processor import process_facebook_data
+from ...utils.data_processors.facebook_group_raw_data_processor import process_facebook_group_data
 from ...config.external_services import verify_brightdata_auth
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ async def process_facebook_ifi_posts(data: dict):
             data = {"posts": data}
         
         # Process the data using the Facebook processor
-        events = process_facebook_data(data)
+        events = process_facebook_group_data(data)
         
         # Store any events found in the posts
         new_count, updated_count = process_new_events(events, "Facebook (IFI-studenter)")
