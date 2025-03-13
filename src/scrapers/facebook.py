@@ -14,6 +14,7 @@ if __name__ == "__main__":
 
 from src.scrapers.base import AsyncScraper
 from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
+from src.utils.timezone import now_oslo
 
 logger = logging.getLogger(__name__)
 
