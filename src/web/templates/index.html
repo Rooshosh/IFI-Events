@@ -29,15 +29,15 @@
                 <i class="bi bi-collection"></i>
                 <span class="filter-text">All</span>
             </button>
-            <button type="button" class="btn btn-outline-secondary" data-source="peoply.app" onclick="filterSource('peoply.app')">
+            <button type="button" class="btn btn-outline-secondary" data-source="Peoply" onclick="filterSource('Peoply')">
                 <img src="{{ url_for('static', filename='img/Filter Icons/Peoply.png') }}" alt="Peoply" class="filter-icon">
                 <span class="filter-text">Peoply</span>
             </button>
-            <button type="button" class="btn btn-outline-secondary" data-source="ifinavet.no" onclick="filterSource('ifinavet.no')">
+            <button type="button" class="btn btn-outline-secondary" data-source="Navet" onclick="filterSource('Navet')">
                 <img src="{{ url_for('static', filename='img/Filter Icons/Navet.png') }}" alt="Navet" class="filter-icon">
                 <span class="filter-text">Navet</span>
             </button>
-            <button type="button" class="btn btn-outline-secondary" data-source="facebook.group" onclick="filterSource('facebook.group')">
+            <button type="button" class="btn btn-outline-secondary" data-source="Facebook" onclick="filterSource('Facebook')">
                 <img src="{{ url_for('static', filename='img/Filter Icons/Facebook.png') }}" alt="Facebook" class="filter-icon">
                 <span class="filter-text">Facebook</span>
             </button>
@@ -74,11 +74,12 @@
                                     class="btn btn-link text-decoration-none"
                                     title="View Event">
                                 <span class="source-text">See on</span>
-                                <img src="{{ url_for('static', filename='img/Filter Icons/' + {
-                                    'peoply.app': 'Peoply.png',
-                                    'ifinavet.no': 'Navet.png',
-                                    'facebook.group': 'Facebook.png'
-                                }[event.source_name]) }}" alt="{{ event.source_name }}" class="source-icon">
+                                <img src="/static/img/Filter Icons/${
+                                    event.source_name === 'Peoply' ? 'Peoply.png' :
+                                    event.source_name === 'Navet' ? 'Navet.png' :
+                                    event.source_name.includes('Facebook') ? 'Facebook.png' :
+                                    'Facebook.png'
+                                }" alt="${event.source_name}" class="source-icon">
                             </button>
                         </div>
                         <div class="list-entry-button list-entry-calendar">
@@ -550,8 +551,9 @@
                                 title="View Event">
                             <span class="source-text">See on</span>
                             <img src="/static/img/Filter Icons/${
-                                event.source_name === 'peoply.app' ? 'Peoply.png' :
-                                event.source_name === 'ifinavet.no' ? 'Navet.png' :
+                                event.source_name === 'Peoply' ? 'Peoply.png' :
+                                event.source_name === 'Navet' ? 'Navet.png' :
+                                event.source_name.includes('Facebook') ? 'Facebook.png' :
                                 'Facebook.png'
                             }" alt="${event.source_name}" class="source-icon">
                         </button>
@@ -711,7 +713,11 @@
         // Filter events
         window.currentEvents = source === 'all' 
             ? [...window.allEventsBackup]
-            : window.allEventsBackup.filter(event => event.source_name === source);
+            : window.allEventsBackup.filter(event => 
+                source === 'Facebook' 
+                    ? event.source_name.includes('Facebook')
+                    : event.source_name === source
+            );
 
         // Re-render the current view with filtered events
         renderCurrentView();

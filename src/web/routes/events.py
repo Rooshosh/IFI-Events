@@ -22,7 +22,7 @@ def get_events():
 def index():
     """Render the events page."""
     events = get_events()
-    return render_template('events.html', events=events)
+    return render_template('index.html', events=events)
 
 @events_bp.route('/calendar.ics')
 def ics_feed():
