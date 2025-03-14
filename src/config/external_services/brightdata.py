@@ -27,8 +27,8 @@ BRIGHTDATA_CONFIG = {
     'include_errors': True,
 
     # Fetch parameters
-    'days_to_fetch': 30,
-    'num_of_posts': 100,
+    'days_to_fetch': 1,
+    'num_of_posts': 10,
 }
 
 
