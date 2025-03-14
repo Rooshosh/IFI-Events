@@ -207,4 +207,11 @@ def check_duplicate_before_insert(new_event: Event, session: Session) -> Optiona
     Raises:
         DatabaseError: If database query fails
     """
-    return _EventDeduplicationDB.check_duplicate_before_insert(new_event, session) 
+    return _EventDeduplicationDB.check_duplicate_before_insert(new_event, session)
+
+def are_events_duplicate(event1: Event, event2: Event) -> bool:
+    """
+    Check if two events are duplicates based on configured thresholds.
+    Returns True if events are considered duplicates, False otherwise.
+    """
+    return _EventDeduplication.are_events_duplicate(event1, event2) 
