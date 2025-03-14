@@ -56,20 +56,21 @@ def migrate_data(clear_existing: bool = False):
         # Ensure tables exist in PostgreSQL
         Base.metadata.create_all(postgres_engine)
         
-        if clear_existing:
-            logger.warning("Clearing existing data from production database...")
-            postgres_session.query(RawScrapeData).delete()
-            postgres_session.query(Event).delete()
-            postgres_session.commit()
-            logger.info("Successfully cleared existing data from production database")
-        
-        # Get all events from SQLite
-        events: List[Event] = sqlite_session.query(Event).all()
-        logger.info(f"Found {len(events)} events in SQLite database")
+        # Always clear raw data as we want to replace it completely
+        logger.info("Clearing existing raw data from production database...")
+        postgres_session.query(RawScrapeData).delete()
+        postgres_session.commit()
+        logger.info("Successfully cleared existing raw data from production database")
         
         # Get all raw data from SQLite
         raw_data = sqlite_session.query(RawScrapeData).all()
         logger.info(f"Found {len(raw_data)} raw data entries in SQLite database")
+        
+        # Get all Facebook events from SQLite
+        events: List[Event] = sqlite_session.query(Event).filter(
+            Event.source_name == "Facebook (IFI-studenter)"
+        ).all()
+        logger.info(f"Found {len(events)} Facebook events in SQLite database")
         
         # Close SQLite session after fetching data
         sqlite_session.close()
@@ -78,6 +79,8 @@ def migrate_data(clear_existing: bool = False):
         # Make objects transient (detached from any session)
         for event in events:
             make_transient(event)
+            # Reset the ID to let PostgreSQL generate a new one
+            event.id = None
         for data in raw_data:
             make_transient(data)
         
@@ -86,7 +89,7 @@ def migrate_data(clear_existing: bool = False):
             for event in events:
                 postgres_session.add(event)
             postgres_session.commit()
-            logger.info("Successfully migrated events to PostgreSQL")
+            logger.info("Successfully migrated Facebook events to PostgreSQL")
         except Exception as e:
             logger.error(f"Error migrating events: {e}")
             postgres_session.rollback()
@@ -119,12 +122,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--clear-existing',
         action='store_true',
-        help='Clear all existing data from production database before copying'
+        help='Clear ALL existing data from production database before copying (NOT RECOMMENDED)'
     )
     args = parser.parse_args()
     
     if args.clear_existing:
-        response = input("WARNING: This will delete all existing data from the production database. Are you sure? (y/N): ")
+        response = input("WARNING: This will delete ALL existing data from the production database. Are you sure? (y/N): ")
         if response.lower() != 'y':
             logger.info("Operation cancelled")
             exit(0)
