@@ -11,9 +11,11 @@ ENV/
 .venv
 .idea/
 .vscode/
-data/cache/
 logs/
 .coverage
+
+# local database
+data/
 
 # Cache and temporary files
 .upm/
