@@ -124,14 +124,19 @@ def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
             logger.warning("No posts found in data")
             return []
         
-        logger.info(f"Processing {len(posts)} posts from Facebook")
+        total_posts = len(posts)
+        logger.info(f"Processing {total_posts} posts from Facebook")
         
         # Process each post
         events: List[Event] = []
         raw_data_entries = []
+        processed_count = 0
         
         for post in posts:
             try:
+                processed_count += 1
+                logger.info(f"Processing post {processed_count}/{total_posts}")
+                
                 # Skip posts without content
                 if not post.get('content'):
                     logger.warning("Skipping post without content")
