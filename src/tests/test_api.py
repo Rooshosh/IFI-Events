@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from web.api import EventAPIClient
+from src.web.api import EventAPIClient
 import logging
 
 # Set up logging

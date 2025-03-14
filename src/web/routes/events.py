@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, make_response, current_app
 from icalendar import Calendar, Event as ICalEvent
-from web.api import EventAPIClient
+from ..api import EventAPIClient
 
 # Create the blueprint
 events_bp = Blueprint('events', __name__)
