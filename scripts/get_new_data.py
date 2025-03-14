@@ -10,7 +10,7 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.source_manager import SourceManager
-from src.new_event_handler import NewEventHandler
+from src.new_event_handler import process_new_events
 
 # Set up logging
 logging.basicConfig(
@@ -29,9 +29,8 @@ def main():
         events = manager.get_all_events()
         logger.info(f"Found {len(events)} events from all sources")
         
-        # Process events using the handler
-        handler = NewEventHandler()
-        new_count, updated_count = handler.process_new_events(events, "all_sources")
+        # Process events using the function directly
+        new_count, updated_count = process_new_events(events, "all_sources")
         
         logger.info(f"Successfully processed events ({new_count} new, {updated_count} updated)")
         

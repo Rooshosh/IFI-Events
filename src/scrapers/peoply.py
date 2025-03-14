@@ -17,7 +17,7 @@ from src.models.event import Event
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 from src.utils.timezone import now_oslo
-from src.new_event_handler import NewEventHandler
+from src.new_event_handler import process_new_events
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,6 @@ if __name__ == "__main__":
     # Store events in database based on default value unless --no-store is provided
     store_in_db = STORE_IN_DB and not args.no_store
     if store_in_db and events:
-        handler = NewEventHandler()
-        new_count, updated_count = handler.process_new_events(events, scraper.name())
+        new_count, updated_count = process_new_events(events, scraper.name())
         print(f"\nStored events: {new_count} new, {updated_count} updated")
 

@@ -1,11 +1,11 @@
 """Main application entry point."""
 
-import uvicorn
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+import uvicorn
 
 if __name__ == "__main__":
     if not IS_PRODUCTION_ENVIRONMENT:
-        # Development mode - use import string for reload support
+        # Development mode
         uvicorn.run(
             "src.api.app:app",  # Use import string for reload support
             host="0.0.0.0",
@@ -14,7 +14,7 @@ if __name__ == "__main__":
             log_level="debug"
         )
     else:
-        # Production mode - use string reference for proper multi-worker support
+        # Production mode
         uvicorn.run(
             "src.api.app:app",  # String reference required for multiple workers
             host="0.0.0.0",
