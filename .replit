@@ -1,7 +1,7 @@
 modules = ["python-3.12", "web", "postgresql-16"]
 
 # Use environment mode from Secrets
-run = "python run.py"
+run = "python main.py"
 
 [nix]
 channel = "stable-24_05"
