@@ -1,7 +1,7 @@
-modules = ["python-3.12", "web", "postgresql-16"]
+modules = ["python-3.12", "web"]
 
 # Use environment mode from Secrets
-run = "python main.py"
+run = "FLASK_ENV=production python main.py"
 
 [nix]
 channel = "stable-24_05"
@@ -9,9 +9,10 @@ channel = "stable-24_05"
 [env]
 PYTHONPATH = "${PYTHONPATH}:${REPL_HOME}"
 PORT = "5001"  # Match your Flask port
+FLASK_ENV = "production"
 
 [deployment]
-run = ["sh", "-c", "FLASK_ENV=production python run.py"]
+run = ["sh", "-c", "FLASK_ENV=production python main.py"]
 deploymentTarget = "cloudrun"
 
 # Enable python packages to be installed
