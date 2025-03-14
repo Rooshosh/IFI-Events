@@ -15,23 +15,9 @@ if __name__ == "__main__":
 from src.scrapers.base import AsyncScraper
 from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
 from src.utils.timezone import now_oslo
+from src.config.external_services import get_brightdata_config
 
 logger = logging.getLogger(__name__)
-
-# Default BrightData configuration
-DEFAULT_BRIGHTDATA_CONFIG = {
-    'api_key': os.getenv('BRIGHTDATA_API_KEY'),
-    'dataset_id': 'gd_lz11l67o2cb3r0lkj3',
-    'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'days_to_fetch': 20,  # Default to fetching just today's posts
-    'num_of_posts': 200,  # Safety limit on number of posts to fetch
-    'webhook_base_url': 'https://e5f0-193-157-238-49.ngrok-free.app',  # TODO: Update this when ngrok URL changes
-    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
-    'webhook_auth': os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER'),
-    'webhook_format': 'json',
-    'webhook_uncompressed': True,
-    'include_errors': True
-}
 
 class FacebookGroupScraper(AsyncScraper):
     """
@@ -41,61 +27,24 @@ class FacebookGroupScraper(AsyncScraper):
     1. Uses BrightData's 'Facebook - Posts by group URL' dataset to fetch posts
     2. Sends results to a configured webhook for processing
     
-    Configuration:
-        brightdata: API configuration for BrightData
-            - api_key: Your BrightData API key (required)
-            - dataset_id: The dataset ID to use
-            - group_url: URL of the Facebook group to scrape
-            - days_to_fetch: How many days of posts to fetch (default: 1)
-            - num_of_posts: Maximum number of posts to fetch (default: 20)
-            - webhook_base_url: Base URL for webhooks (update when ngrok changes)
-            - webhook_endpoint: Webhook endpoint path
-            - webhook_auth: Authorization header for webhook
-            - webhook_format: Format of webhook data (default: json)
-            - webhook_uncompressed: Whether to send uncompressed data (default: true)
-            - include_errors: Whether to include errors in response (default: true)
+    Configuration is loaded from src.config.external_services.brightdata
     """
     
-    def __init__(self, brightdata_config: Dict[str, Any] = None):
+    def __init__(self):
         """
-        Initialize the scraper with optional configuration overrides.
+        Initialize the scraper with configuration from brightdata.py.
         
-        Args:
-            brightdata_config: Override default BrightData settings
-            
         Raises:
-            ValueError: If required environment variables or configuration values are missing or invalid
+            ValueError: If required configuration values are missing or invalid
         """
-        from src.config.external_services import get_brightdata_config
-        
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
-        if brightdata_config:
-            self.brightdata_config.update(brightdata_config)
-        
-        # Validate required environment variables
-        if not self.brightdata_config['api_key']:
-            raise ValueError("BRIGHTDATA_API_KEY environment variable is required")
-        if not self.brightdata_config['webhook_auth']:
-            raise ValueError("BRIGHTDATA_AUTHORIZATION_HEADER environment variable is required")
-        
-        # Validate configuration values
-        if not self.brightdata_config['group_url']:
-            raise ValueError("group_url is required")
-        if not self.brightdata_config['webhook_base_url']:
-            raise ValueError("webhook_base_url is required")
-        if not self.brightdata_config['webhook_endpoint']:
-            raise ValueError("webhook_endpoint is required")
-        if self.brightdata_config['days_to_fetch'] < 1:
-            raise ValueError("days_to_fetch must be at least 1")
-        if self.brightdata_config['num_of_posts'] < 1:
-            raise ValueError("num_of_posts must be at least 1")
         
         # Set up BrightData API parameters
-        self.base_url = "https://api.brightdata.com/datasets/v3"
+        self.base_url = self.brightdata_config['base_url']
         self.headers = {
             "Authorization": f"Bearer {self.brightdata_config['api_key']}",
-            "Content-Type": "application/json",
+            "Content-Type": self.brightdata_config['content_type'],
         }
         self.group_url = self.brightdata_config['group_url']
         
