@@ -267,6 +267,7 @@ if __name__ == "__main__":
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Fetch events from ifinavet.no')
     parser.add_argument('--no-store', action='store_true', help='Do not store events in database')
+    parser.add_argument('--no-details', action='store_true', help='Do not fetch detailed information for each event')
     args = parser.parse_args()
     
     # Set up logging
@@ -277,6 +278,8 @@ if __name__ == "__main__":
     
     # Create and run scraper
     scraper = NavetScraper()
+    if args.no_details:
+        scraper.fetch_details = False
     events = scraper.get_events()
     
     # Print results
