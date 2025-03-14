@@ -62,7 +62,7 @@ class Event(Base):
     source_url = Column(String)
     source_name = Column(String)
     created_at = Column(DateTime(timezone=True), default=now_oslo)
-    fetched_at = Column(DateTime(timezone=True))  # When the event data was fetched from source
+    fetched_at = Column(DateTime(timezone=True), nullable=False, default=now_oslo)  # When the event data was fetched from source
     capacity = Column(Integer)
     spots_left = Column(Integer)
     registration_opens = Column(DateTime(timezone=True))
@@ -86,6 +86,8 @@ class Event(Base):
         for field in ['start_time', 'end_time', 'registration_opens', 'created_at', 'fetched_at']:
             if field in kwargs:
                 kwargs[field] = ensure_oslo_timezone(kwargs[field])
+            elif field == 'fetched_at':  # Always set fetched_at if not provided
+                kwargs[field] = now_oslo()
         
         super().__init__(**kwargs)
     

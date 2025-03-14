@@ -7,8 +7,8 @@ from datetime import datetime
 from .models.event import Event
 from .db import db, DatabaseError, with_retry
 from .utils.deduplication import (
-    check_duplicate_before_insert,
-    merge_events
+    merge_events,
+    check_duplicate_before_insert
 )
 
 logger = logging.getLogger(__name__)
@@ -55,11 +55,12 @@ def process_new_events(
                     continue
                 
                 # Check for duplicates
-                existing_event = check_duplicate_before_insert(event)
+                existing_event = check_duplicate_before_insert(event, session)
                 
                 if existing_event:
                     # Merge and update existing event
                     merged_event = merge_events(existing_event, event)
+                    # Update its attributes
                     for key, value in merged_event.__dict__.items():
                         if not key.startswith('_'):
                             setattr(existing_event, key, value)
