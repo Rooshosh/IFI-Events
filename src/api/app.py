@@ -10,7 +10,12 @@ from src.config.environment import IS_PRODUCTION_ENVIRONMENT # ¿ Environment mu
 from src.config.cors import CORS_CONFIG
 from src.utils.logging_config import setup_logging
 from src.db import db
-from .routes import event_queries, event_fetch_trigger, brightdata_facebook_ifi_receiver
+from .routes import (
+    event_queries,
+    event_fetch_trigger,
+    brightdata_facebook_ifi_receiver,
+    health
+)
 
 # Set up logging
 setup_logging()
@@ -36,27 +41,21 @@ def create_application() -> FastAPI:
         title="IFI Events API",
         description="API for managing and processing events from various sources",
         version="1.0.0",
-        docs_url=None if IS_PRODUCTION_ENVIRONMENT else '/docs',
-        redoc_url=None if IS_PRODUCTION_ENVIRONMENT else '/redoc',
+        docs_url=None if IS_PRODUCTION_ENVIRONMENT else '/api/docs',
+        redoc_url=None if IS_PRODUCTION_ENVIRONMENT else '/api/redoc',
         lifespan=lifespan
     )
 
     # Configure CORS
     app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 
-    # Include routers
-    app.include_router(event_queries.router)
-    app.include_router(event_fetch_trigger.router)
-    app.include_router(brightdata_facebook_ifi_receiver.router)
-
-    @app.get("/", tags=["health"])
-    async def root():
-        """Health check endpoint."""
-        return {
-            "status": "healthy",
-            "environment": "production" if IS_PRODUCTION_ENVIRONMENT else "development",
-            "version": app.version
-        }
+    # Include routers with /api prefix
+    app.include_router(event_queries.router, prefix="/api")
+    app.include_router(event_fetch_trigger.router, prefix="/api")
+    app.include_router(brightdata_facebook_ifi_receiver.router, prefix="/api")
+    
+    # Include health check router without /api prefix
+    app.include_router(health.router)
 
     return app
 
