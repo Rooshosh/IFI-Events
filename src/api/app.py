@@ -49,13 +49,13 @@ def create_application() -> FastAPI:
     # Configure CORS
     app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 
-    # Include routers with /api prefix
+    # Include health check router without prefix
+    app.include_router(health.router)
+
+    # Include routers with prefix
     app.include_router(event_queries.router, prefix="/api")
     app.include_router(event_fetch_trigger.router, prefix="/api")
-    app.include_router(brightdata_facebook_ifi_receiver.router, prefix="/api")
-    
-    # Include health check router without /api prefix
-    app.include_router(health.router)
+    app.include_router(brightdata_facebook_ifi_receiver.router, prefix="/webhook")
 
     return app
 

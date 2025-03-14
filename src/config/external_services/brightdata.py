@@ -17,7 +17,7 @@ BRIGHTDATA_CONFIG = {
 
     # Webhook configuration
     'webhook_base_url': 'https://api.ifi.events' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
-    'webhook_endpoint': '/webhook/brightdata/facebook-group',
+    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_format': 'json',
     'webhook_uncompressed': True,
 

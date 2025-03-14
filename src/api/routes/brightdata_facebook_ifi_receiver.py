@@ -12,7 +12,7 @@ from ...config.external_services import verify_brightdata_auth
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/webhook/brightdata",
+    prefix="/brightdata",
     tags=["brightdata"]
 )
 
