@@ -1,6 +1,6 @@
 from flask import Flask, render_template
-from web.routes import events_bp
-from config import Config
+from .routes import events_bp
+from ..config import Config
 import logging
 
 # Module logger
