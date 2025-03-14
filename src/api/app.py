@@ -1,18 +1,15 @@
 """FastAPI application configuration module."""
 
-# Environment must be imported first
-from src.config.environment import IS_PRODUCTION_ENVIRONMENT
-
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Internal imports
+from src.config.environment import IS_PRODUCTION_ENVIRONMENT # ¿ Environment must be imported first ?
 from src.config.cors import CORS_CONFIG
 from src.utils.logging_config import setup_logging
 from src.db import db
-from src.config.external_services.openai import init_openai_client
 from .routes import event_queries, event_fetch_trigger, brightdata_facebook_ifi_receiver
 
 # Set up logging
@@ -26,10 +23,6 @@ async def lifespan(app: FastAPI):
     try:
         db.ensure_tables_exist()
         logger.info("Database initialized successfully")
-        
-        # Initialize OpenAI client
-        init_openai_client()
-        logger.info("OpenAI client initialized successfully")
     except Exception as e:
         logger.error(f"Startup failed: {e}")
         raise
