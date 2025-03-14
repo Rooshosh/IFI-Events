@@ -57,9 +57,9 @@ def is_event_post(
     """
     try:
         config = config or OPENAI_CONFIG.copy()
-        client = init_openai_client()
+        openai = init_openai_client()
         
-        response = client.chat.completions.create(
+        response = openai.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
             max_tokens=config['max_tokens'],
@@ -106,10 +106,10 @@ def parse_event_details(
     """
     try:
         config = config or OPENAI_CONFIG.copy()
-        client = init_openai_client()
+        openai = init_openai_client()
         
         current_date = datetime.now().strftime("%Y-%m-%d")
-        response = client.chat.completions.create(
+        response = openai.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
             max_tokens=config['max_tokens'],

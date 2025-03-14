@@ -14,7 +14,8 @@ OPENAI_CONFIG = {
     'timeout': 30.0
 }
 
-_client: Optional[OpenAI] = None
+# Module-level singleton instance
+_openai: Optional[OpenAI] = None
 
 def get_openai_config() -> Dict[str, Any]:
     """Get OpenAI configuration with validation."""
@@ -31,16 +32,17 @@ def init_openai_client() -> OpenAI:
     Raises:
         ValueError: If OPENAI_API_KEY environment variable is not set
     """
-    global _client
+    global _openai
     
-    config = get_openai_config()
-    
-    if _client is None:
+    if _openai is None:
+        config = get_openai_config()
         # Create a custom httpx client without any proxy settings
         http_client = httpx.Client(
             base_url="https://api.openai.com/v1",
             headers={"Authorization": f"Bearer {config['api_key']}"},
             timeout=config['timeout']
         )
-        _client = OpenAI(api_key=config['api_key'], http_client=http_client)
+        _openai = OpenAI(api_key=config['api_key'], http_client=http_client)
+    
+    return _openai
  

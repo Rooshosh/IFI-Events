@@ -7,6 +7,7 @@ import logging
 import requests
 import json
 from pathlib import Path
+import argparse
 
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -146,7 +147,11 @@ def simulate_webhook(snapshot_id: str):
         raise
 
 if __name__ == "__main__":
-    # Use provided snapshot ID or default
-    snapshot_id = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SNAPSHOT_ID
-    logger.info(f"Using snapshot ID: {snapshot_id}")
-    simulate_webhook(snapshot_id) 
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Simulate webhook data by fetching from a BrightData snapshot')
+    parser.add_argument('snapshot_id', nargs='?', default=DEFAULT_SNAPSHOT_ID,
+                      help=f'Snapshot ID to fetch (default: {DEFAULT_SNAPSHOT_ID})')
+    args = parser.parse_args()
+    
+    logger.info(f"Using snapshot ID: {args.snapshot_id}")
+    simulate_webhook(args.snapshot_id) 
