@@ -5,20 +5,11 @@ import logging
 from typing import List, Optional
 import requests
 from bs4 import BeautifulSoup
-from zoneinfo import ZoneInfo
 from urllib.parse import urljoin
-import sys
-from pathlib import Path
-import argparse
-
-# Add src to Python path when running directly
-if __name__ == "__main__":
-    sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.scrapers.base import SyncScraper
 from src.models.event import Event
 from src.utils.timezone import ensure_oslo_timezone, now_oslo
-from src.new_event_handler import process_new_events
 
 logger = logging.getLogger(__name__)
 
@@ -258,43 +249,4 @@ class NavetScraper(SyncScraper):
             
         except Exception as e:
             logger.error(f"Error fetching events from {self.name()}: {e}")
-            return []
-
-if __name__ == "__main__":
-    # Default value for storing events in database
-    STORE_IN_DB = True
-    
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description='Fetch events from ifinavet.no')
-    parser.add_argument('--no-store', action='store_true', help='Do not store events in database')
-    parser.add_argument('--no-details', action='store_true', help='Do not fetch detailed information for each event')
-    args = parser.parse_args()
-    
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Create and run scraper
-    scraper = NavetScraper()
-    if args.no_details:
-        scraper.fetch_details = False
-    events = scraper.get_events()
-    
-    # Print results
-    print(f"\nFound {len(events)} events:")
-    for event in events:
-        print(f"\nTitle: {event.title}")
-        print(f"Date: {event.start_time}")
-        print(f"Location: {event.location}")
-        print(f"URL: {event.source_url}")
-        if event.author:
-            print(f"Organizer: {event.author}")
-        print("-" * 40)
-    
-    # Store events in database based on default value unless --no-store is provided
-    store_in_db = STORE_IN_DB and not args.no_store
-    if store_in_db and events:
-        new_count, updated_count = process_new_events(events, scraper.name())
-        print(f"\nStored events: {new_count} new, {updated_count} updated") 
+            return [] 

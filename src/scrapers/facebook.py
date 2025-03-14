@@ -3,14 +3,7 @@
 import logging
 from typing import List, Optional, Dict, Any
 import requests
-import os
-import sys
-from pathlib import Path
 from datetime import datetime, timedelta
-
-# Add src to Python path when running directly
-if __name__ == "__main__":
-    sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.scrapers.base import AsyncScraper
 from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
@@ -151,50 +144,3 @@ class FacebookGroupScraper(AsyncScraper):
         except Exception as e:
             logger.error(f"Other error: {str(e)}")
             return False
-
-def scrape_facebook_posts(days: int = 4):
-    """
-    Scrape Facebook posts from the last N days.
-    
-    Args:
-        days: Number of days to look back
-    """
-    # Calculate date range in Oslo timezone
-    end_date = now_oslo()
-    start_date = end_date - timedelta(days=days)
-    
-    # Set end_date to end of day (23:59:59)
-    end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-    
-    # Get URLs of already processed posts
-    processed_urls = get_facebook_post_urls(start_date=start_date, end_date=end_date)
-    logger.info(f"Found {len(processed_urls)} already processed posts to exclude")
-    
-    # Initialize scraper
-    scraper = FacebookGroupScraper()
-    
-    # Scrape new posts
-    try:
-        scraper.scrape_posts(start_date=start_date, end_date=end_date, exclude_urls=processed_urls)
-    except Exception as e:
-        logger.error(f"Failed to scrape Facebook posts: {str(e)}")
-        raise
-
-if __name__ == "__main__":
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Create and run scraper
-    scraper = FacebookGroupScraper()
-    success = scraper.initialize_data_fetch()
-    
-    # Print results
-    if success:
-        print("\nScrape triggered successfully!")
-        print("Results will be sent to the configured webhook.")
-    else:
-        print("\nFailed to trigger scrape.")
-        print("Check the logs for more details.") 
