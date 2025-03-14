@@ -24,4 +24,7 @@ def create_app(config_class=Config):
     def internal_error(error):
         return render_template('errors/500.html'), 500
     
-    return app 
+    return app
+
+# Create the app instance
+app = create_app() 

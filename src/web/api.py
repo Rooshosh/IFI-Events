@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 import requests
 from datetime import datetime
-from models.event import Event
+from ..models.event import Event
 
 logger = logging.getLogger(__name__)
 
