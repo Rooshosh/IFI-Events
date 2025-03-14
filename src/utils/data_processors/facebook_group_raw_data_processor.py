@@ -140,16 +140,27 @@ def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
                 # Prepare post content for LLM analysis
                 content = f"{post.get('post_external_title', '')}\n\n{post.get('content', '')}"
                 url = post.get('url', '')
+                post_date = post.get('date_posted')
+                author = post.get('user_username_raw')
                 
                 # First, determine if this is an event
-                is_event, event_explanation = is_event_post(content)
+                is_event, event_explanation = is_event_post(
+                    content=content,
+                    post_date=post_date,
+                    author=author
+                )
                 
                 # Set processing status based on event detection
                 processing_status = 'success' if is_event else 'not_an_event'
                 
                 # If it's an event, extract detailed information
                 if is_event:
-                    event_details = parse_event_details(content, url)
+                    event_details = parse_event_details(
+                        content=content,
+                        url=url,
+                        post_date=post_date,
+                        author=author
+                    )
                     if event_details:
                         try:
                             # Create event object

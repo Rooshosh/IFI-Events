@@ -43,6 +43,8 @@ def _extract_json_from_response(response_text: str) -> Optional[Dict[str, Any]]:
 
 def is_event_post(
     content: str,
+    post_date: Optional[str] = None,
+    author: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None
 ) -> Tuple[bool, str]:
     """
@@ -50,6 +52,8 @@ def is_event_post(
     
     Args:
         content: The text content to analyze
+        post_date: The original posting date of the content
+        author: The author of the post
         config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
     
     Returns:
@@ -59,6 +63,12 @@ def is_event_post(
         config = config or OPENAI_CONFIG.copy()
         openai = init_openai_client()
         
+        # Prepare content with metadata
+        content_with_metadata = f"""Posted on: {post_date if post_date else 'Unknown date'}
+Posted by: {author if author else 'Unknown author'}
+
+{content}"""
+        
         response = openai.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
@@ -66,11 +76,19 @@ def is_event_post(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that determines if a post is about an event. Always respond with a valid JSON object."
+                    "content": (
+                        "You are a helpful assistant that determines if a post is about an event. "
+                        "The input will include the post's date and author. "
+                        "Consider these factors when determining if something is an event:\n"
+                        "1. The temporal context (when the post was made vs when the event is/was)\n"
+                        "2. The author's role (official sources are more likely to post events)\n"
+                        "3. The content structure and language used\n"
+                        "Always respond with a valid JSON object."
+                    )
                 },
                 {
                     "role": "user",
-                    "content": f"Is this post about an event? Please respond with a JSON object containing 'is_event' (boolean) and 'explanation' (string). Post content:\n\n{content}"
+                    "content": f"Is this post about an event? Please respond with a JSON object containing 'is_event' (boolean) and 'explanation' (string). Post content:\n\n{content_with_metadata}"
                 }
             ]
         )
@@ -91,6 +109,8 @@ def is_event_post(
 def parse_event_details(
     content: str,
     url: str,
+    post_date: Optional[str] = None,
+    author: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, Any]]:
     """
@@ -99,6 +119,8 @@ def parse_event_details(
     Args:
         content: The text content to analyze
         url: The URL of the post
+        post_date: The original posting date of the content
+        author: The author of the post
         config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
     
     Returns:
@@ -108,7 +130,12 @@ def parse_event_details(
         config = config or OPENAI_CONFIG.copy()
         openai = init_openai_client()
         
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        # Prepare content with metadata
+        content_with_metadata = f"""Posted on: {post_date if post_date else 'Unknown date'}
+Posted by: {author if author else 'Unknown author'}
+
+{content}"""
+        
         response = openai.chat.completions.create(
             model=config['model'],
             temperature=config['temperature'],
@@ -117,13 +144,16 @@ def parse_event_details(
                 {
                     "role": "system",
                     "content": (
-                        f"You are a helpful assistant that extracts event details from social media posts. "
-                        f"Today's date is {current_date}. The input will contain the post's original posting date. "
-                        f"When interpreting dates in the post content:\n"
-                        f"1. If the post mentions 'today', 'i dag', 'tomorrow', 'imorgen', etc., use the post's date as reference\n"
-                        f"2. If a date is mentioned without a year, use the year from the post date\n"
-                        f"3. For explicit dates with years, use those exactly as specified\n"
-                        f"Always respond with a valid JSON object."
+                        "You are a helpful assistant that extracts event details from social media posts. "
+                        "The input will include the post's date and author. "
+                        "When interpreting dates in the post content:\n"
+                        "1. If the post mentions 'today', 'i dag', 'tomorrow', 'imorgen', etc., use the post's date as reference\n"
+                        "2. If a date is mentioned without a year, use the year from the post date\n"
+                        "3. For explicit dates with years, use those exactly as specified\n"
+                        "4. Consider the temporal context (when the post was made) when interpreting relative dates\n"
+                        "5. If the post is about a past event, ensure the dates are in the past relative to the post date\n"
+                        "6. If the post is about a future event, ensure the dates are in the future relative to the post date\n"
+                        "Always respond with a valid JSON object."
                     )
                 },
                 {
@@ -138,7 +168,7 @@ def parse_event_details(
                         f"- 'location': Event location (optional)\n"
                         f"- 'food': Food/refreshments info (optional)\n"
                         f"- 'registration_info': Registration details (optional)\n\n"
-                        f"Post:\n\n{content}\n\nPost URL: {url}"
+                        f"Post:\n\n{content_with_metadata}\n\nPost URL: {url}"
                     )
                 }
             ]
