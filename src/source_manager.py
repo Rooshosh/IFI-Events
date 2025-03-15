@@ -11,8 +11,6 @@ The manager uses the registry in sources.py to determine what scrapers exist
 and which ones are enabled, then dynamically loads and manages them.
 This allows scrapers to be added or removed by just updating the registry,
 without needing to modify the manager itself.
-
-When run directly, this module will fetch and print events from all enabled sources.
 """
 
 import importlib
@@ -194,61 +192,37 @@ class SourceManager:
             return []
     
     @staticmethod
-    def get_all_events() -> List[Event]:
+    def fetch_and_parse_single_source(source_id: str, registration: ScraperRegistration) -> List[Event]:
         """
-        Get events from all enabled scrapers.
+        Fetch events from a single source, handling both sync and async scrapers.
         
-        This method:
-        1. Initializes all async scrapers first
-        2. Then fetches events from all sync scrapers
-        3. Combines all events into a single list
-        
+        Args:
+            source_id: Identifier for the source
+            registration: Registration info for the scraper
+            
         Returns:
-            List[Event]: Combined list of events from all enabled scrapers
+            List[Event]: List of events from the source, or empty list if failed
+            
+        Raises:
+            Exception: If there's an error fetching from the source
         """
-        # First initialize all async scrapers
-        async_success = SourceManager.initialize_async_scrapers()
-        if not async_success:
-            logger.warning("Some async scrapers failed to initialize")
-        
-        # Then get events from all sync scrapers
-        all_events = []
-        enabled_sources = get_enabled_sources()
-        _, sync_scrapers = SourceManager._group_scrapers_by_type(enabled_sources)
-        
-        logger.info(f"Fetching events from {len(sync_scrapers)} sync scrapers")
-        
-        for source_id, registration in sync_scrapers:
-            try:
-                events = SourceManager.get_events_from_sync_source(source_id, registration)
-                all_events.extend(events)
-            except Exception as e:
-                logger.error(f"Failed to get events from {source_id}: {e}")
-        
-        logger.info(f"Found total of {len(all_events)} events from sync sources")
-        return all_events
-        # Async scrapers are not included in the returned list,
-        # because they are not fetched directly by this function.
-        # They must be handled by the webhook or callback mechanism.
-
-if __name__ == "__main__":
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Create manager and get events
-    manager = SourceManager()
-    events = manager.get_all_events()
-    
-    # Sort events by start time
-    events.sort(key=lambda e: e.start_time)
-    
-    # Print results
-    print(f"\nFound {len(events)} events from enabled sources:\n")
-    
-    for i, event in enumerate(events, 1):
-        print(f"\n--- Event {i}/{len(events)} ---")
-        print(event.to_detailed_string())
-        print("-" * 40) 
+        try:
+            scraper_class = SourceManager.get_scraper_class(registration)
+            scraper_type = SourceManager._get_scraper_type(scraper_class)
+            
+            if scraper_type == 'async':
+                # For async scrapers, we just initialize them
+                # They will handle their own data processing through webhooks
+                scraper = scraper_class()
+                success = scraper.initialize_data_fetch()
+                if not success:
+                    logger.error(f"Failed to initialize async scraper {source_id}")
+                    return []
+                return []  # Async scrapers handle their own processing
+            else:
+                # For sync scrapers, we fetch events directly
+                return SourceManager.get_events_from_sync_source(source_id, registration)
+                
+        except Exception as e:
+            logger.error(f"Error fetching from source {source_id}: {e}")
+            return [] 
