@@ -6,6 +6,14 @@ from ..models.event import Event
 from ..db import db, DatabaseError, with_retry
 from sqlalchemy.orm import Session
 
+# TODO: Refactor class structure
+# - Currently all methods are static and classes are just used as namespaces
+# - Should be refactored to module-level functions instead
+# - Keep the same public API (merge_events, check_duplicate_before_insert, are_events_duplicate)
+# - Make implementation details private with _ prefix
+# - Remove _EventDeduplication and _EventDeduplicationDB classes
+# This will make the code more idiomatic Python and better reflect its usage pattern
+
 logger = logging.getLogger(__name__)
 
 # Deduplication configuration constants
