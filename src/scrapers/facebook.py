@@ -4,9 +4,12 @@ import logging
 from typing import List, Optional, Dict, Any
 import requests
 from datetime import datetime, timedelta
+from sqlalchemy import func
+import os
 
 from src.scrapers.base import AsyncScraper
-from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
+from src.db import db, DatabaseError
+from src.models.raw_scrape_data import ScrapedPost
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
@@ -16,8 +19,7 @@ logger = logging.getLogger(__name__)
 # Scraper-specific configuration
 SCRAPER_CONFIG = {
     # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
-    # TODO: Rename endpoint to facebook-post(s) or smth
+    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
     'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_format': 'json',
     'webhook_uncompressed': True,
@@ -50,6 +52,9 @@ class FacebookGroupScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
+        if not IS_PRODUCTION_ENVIRONMENT and not SCRAPER_CONFIG['webhook_base_url']:
+            raise ValueError("NGROK_URL environment variable must be set in development mode")
+            
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
         
@@ -89,18 +94,29 @@ class FacebookGroupScraper(AsyncScraper):
         Returns:
             List[str]: List of post IDs to exclude from scraping
         """
-        # Get URLs from raw data
-        urls = get_facebook_post_urls(start_date=self.start_date, end_date=self.end_date)
-        
-        # Extract post IDs from URLs
-        post_ids = []
-        for url in urls:
-            post_id = self._extract_post_id(url)
-            if post_id:
-                post_ids.append(post_id)
-        
-        logger.info(f"Found {len(post_ids)} already processed posts to exclude")
-        return post_ids
+        try:
+            with db.session() as session:
+                # Get all posts within the date range
+                query = session.query(ScrapedPost)
+                query = query.filter(ScrapedPost.scraped_at >= self.start_date)
+                query = query.filter(ScrapedPost.scraped_at <= self.end_date)
+                
+                posts = query.all()
+                logger.info(f"Found {len(posts)} already processed posts")
+                
+                # Extract post IDs from URLs
+                post_ids = []
+                for post in posts:
+                    post_id = self._extract_post_id(post.post_url)
+                    if post_id:
+                        post_ids.append(post_id)
+                
+                logger.info(f"Extracted {len(post_ids)} post IDs to exclude")
+                return post_ids
+                
+        except Exception as e:
+            logger.error(f"Error fetching processed post IDs: {e}")
+            raise DatabaseError(f"Failed to fetch processed post IDs: {e}") from e
     
     def initialize_data_fetch(self) -> bool:
         """

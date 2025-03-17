@@ -4,6 +4,7 @@ import logging
 from typing import List, Optional, Dict, Any
 import requests
 from datetime import datetime
+import os
 
 from src.scrapers.base import AsyncScraper
 from src.utils.timezone import now_oslo
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Scraper-specific configuration
 SCRAPER_CONFIG = {
     # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'NGROK-URL',
+    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
     'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
     'webhook_format': 'json',
     'webhook_uncompressed': True,
@@ -43,6 +44,9 @@ class FacebookEventScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
+        if not IS_PRODUCTION_ENVIRONMENT and not SCRAPER_CONFIG['webhook_base_url']:
+            raise ValueError("NGROK_URL environment variable must be set in development mode")
+            
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
         

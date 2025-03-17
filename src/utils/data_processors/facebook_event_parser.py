@@ -123,7 +123,7 @@ def _create_event_from_data(event_data: Dict[str, Any]) -> Optional[Event]:
         logger.error(f"Error creating event from data: {str(e)}", exc_info=True)
         return None
 
-def process_facebook_event_data(data: Dict[str, Any]) -> List[Event]:
+def parse_facebook_events(data: Dict[str, Any]) -> List[Event]:
     """
     Process raw Facebook Event data to extract events.
     

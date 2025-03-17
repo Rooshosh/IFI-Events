@@ -1,49 +1,39 @@
-"""Raw scrape data model for storing webhook responses."""
+"""Model for storing scraped posts and their event status."""
 
 from datetime import datetime
-from typing import Optional, Dict, Any
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
-from sqlalchemy.orm import relationship
+from typing import Dict, Any
+from sqlalchemy import Column, Integer, String, DateTime
 
 from .base import Base
 from ..utils.timezone import ensure_oslo_timezone, now_oslo
 
-class RawScrapeData(Base):
+class ScrapedPost(Base):
     """
-    Model for storing raw data received from scrapers via webhooks.
+    Model for storing scraped posts and their event status.
     
-    This model stores the complete data received from webhook endpoints
-    along with its processing status. The data can be processed either
-    immediately when received or later in a separate step.
+    This model stores information about posts that have been scraped,
+    including their URL and whether they were determined to be about events.
     
     Fields:
         id: Unique identifier (auto-generated)
-        source: Source of the data (e.g., 'brightdata_facebook_group')
-        raw_data: Complete JSON response as received from the webhook
-        created_at: When the data was received from the webhook
-        processed: Whether the data has been processed (true/false)
-        processed_at: When the data was processed (null if not processed)
-        processing_status: Status of processing (e.g., 'success', 'not_an_event', 'failed', 'pending')
+        post_url: URL of the scraped post
+        event_status: Status indicating if the post is about an event
+                     ('contains-event', 'is-event-llm', 'not-event-llm')
+        scraped_at: When the post was scraped
     """
-    __tablename__ = 'raw_scrape_data'
+    __tablename__ = 'scraped_posts'
     
     # Required fields
     id = Column(Integer, primary_key=True)
-    source = Column(String, nullable=False)
-    raw_data = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=now_oslo)
-    
-    # Processing status
-    processed = Column(Boolean, default=False)
-    processed_at = Column(DateTime(timezone=True), nullable=True)
-    processing_status = Column(String, default='pending')
+    post_url = Column(String, nullable=False, unique=True)
+    event_status = Column(String, nullable=False)
+    scraped_at = Column(DateTime(timezone=True), default=now_oslo)
     
     def __init__(self, **kwargs):
-        """Initialize RawScrapeData with the given attributes."""
+        """Initialize ScrapedPost with the given attributes."""
         # Ensure timezone-aware datetimes
-        for field in ['created_at', 'processed_at']:
-            if field in kwargs and kwargs[field] is not None:
-                kwargs[field] = ensure_oslo_timezone(kwargs[field])
+        if 'scraped_at' in kwargs and kwargs['scraped_at'] is not None:
+            kwargs['scraped_at'] = ensure_oslo_timezone(kwargs['scraped_at'])
         
         super().__init__(**kwargs)
     
@@ -51,14 +41,11 @@ class RawScrapeData(Base):
         """Convert to dictionary."""
         return {
             'id': self.id,
-            'source': self.source,
-            'raw_data': self.raw_data,
-            'created_at': self.created_at,
-            'processed': self.processed,
-            'processed_at': self.processed_at,
-            'processing_status': self.processing_status
+            'post_url': self.post_url,
+            'event_status': self.event_status,
+            'scraped_at': self.scraped_at
         }
     
     def __str__(self) -> str:
         """String representation."""
-        return f"RawScrapeData(id={self.id}, source={self.source}, processed={self.processed})" 
+        return f"ScrapedPost(id={self.id}, post_url={self.post_url}, event_status={self.event_status})" 

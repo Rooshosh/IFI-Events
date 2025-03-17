@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from ..models import Base
 from ..models.event import Event  # noqa
-from ..models.raw_scrape_data import RawScrapeData  # noqa
+from ..models.raw_scrape_data import ScrapedPost  # noqa
 from ..config.environment import IS_PRODUCTION_ENVIRONMENT
 
 logger = logging.getLogger(__name__)

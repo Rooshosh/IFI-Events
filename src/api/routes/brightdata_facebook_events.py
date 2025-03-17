@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Header, Body, BackgroundTasks
 
 from ...models.event import Event
 from ...new_event_handler import process_new_events
-from ...utils.data_processors.parse_facebook_events import process_facebook_event_data
+from src.utils.data_processors.facebook_event_parser import parse_facebook_events
 from ...config.external_services import verify_brightdata_auth
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ async def process_facebook_events(data: dict):
             data = {"events": data}
         
         # Process the data using the Facebook Event processor
-        events = process_facebook_event_data(data)
+        events = parse_facebook_events(data)
         
         # Store any events found
         new_count, updated_count = process_new_events(events, "Facebook Events")

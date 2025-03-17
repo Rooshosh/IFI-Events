@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Script to create and populate the production database from development database.
 
-This script copies all events and raw data from the local SQLite development database
+This script copies all events and scraped posts from the local SQLite development database
 to the production PostgreSQL database hosted on Supabase.
 """
 
@@ -17,7 +17,7 @@ from sqlalchemy.orm.session import make_transient
 
 from src.models import Base
 from src.models.event import Event
-from src.models.raw_scrape_data import RawScrapeData
+from src.models.raw_scrape_data import ScrapedPost
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
 
 # Set up logging
@@ -56,15 +56,15 @@ def migrate_data(clear_existing: bool = False):
         # Ensure tables exist in PostgreSQL
         Base.metadata.create_all(postgres_engine)
         
-        # Always clear raw data as we want to replace it completely
-        logger.info("Clearing existing raw data from production database...")
-        postgres_session.query(RawScrapeData).delete()
+        # Always clear scraped posts as we want to replace them completely
+        logger.info("Clearing existing scraped posts from production database...")
+        postgres_session.query(ScrapedPost).delete()
         postgres_session.commit()
-        logger.info("Successfully cleared existing raw data from production database")
+        logger.info("Successfully cleared existing scraped posts from production database")
         
-        # Get all raw data from SQLite
-        raw_data = sqlite_session.query(RawScrapeData).all()
-        logger.info(f"Found {len(raw_data)} raw data entries in SQLite database")
+        # Get all scraped posts from SQLite
+        scraped_posts = sqlite_session.query(ScrapedPost).all()
+        logger.info(f"Found {len(scraped_posts)} scraped posts in SQLite database")
         
         # Get all Facebook events from SQLite
         events: List[Event] = sqlite_session.query(Event).filter(
@@ -81,8 +81,8 @@ def migrate_data(clear_existing: bool = False):
             make_transient(event)
             # Reset the ID to let PostgreSQL generate a new one
             event.id = None
-        for data in raw_data:
-            make_transient(data)
+        for post in scraped_posts:
+            make_transient(post)
         
         # Insert events into PostgreSQL
         try:
@@ -95,14 +95,14 @@ def migrate_data(clear_existing: bool = False):
             postgres_session.rollback()
             raise
         
-        # Insert raw data into PostgreSQL
+        # Insert scraped posts into PostgreSQL
         try:
-            for data in raw_data:
-                postgres_session.add(data)
+            for post in scraped_posts:
+                postgres_session.add(post)
             postgres_session.commit()
-            logger.info("Successfully migrated raw data to PostgreSQL")
+            logger.info("Successfully migrated scraped posts to PostgreSQL")
         except Exception as e:
-            logger.error(f"Error migrating raw data: {e}")
+            logger.error(f"Error migrating scraped posts: {e}")
             postgres_session.rollback()
             raise
         

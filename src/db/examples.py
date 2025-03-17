@@ -9,7 +9,7 @@ Environment Configuration:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, ZoneInfo
 from typing import List, Optional
 import os
 from pathlib import Path
@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..models.event import Event
-from ..models.raw_scrape_data import RawScrapeData
+from ..models.raw_scrape_data import ScrapedPost
 from ..config.environment import IS_PRODUCTION_ENVIRONMENT
 from . import db, with_retry, execute_in_transaction, DatabaseError, DatabaseConfig, Database
 
@@ -79,7 +79,8 @@ def safe_update_event(event_id: int, new_title: str) -> Event:
 def create_event_with_raw_data(
     title: str,
     start_time: datetime,
-    raw_data: dict
+    post_url: str,
+    event_status: str
 ) -> Event:
     """Example of performing multiple operations in a single transaction."""
     with db.session() as session:
@@ -92,19 +93,19 @@ def create_event_with_raw_data(
             )
             session.add(event)
             
-            # Create associated raw data
-            raw_data_entry = RawScrapeData(
-                source="example",
-                raw_data=raw_data,
-                created_at=datetime.utcnow()
+            # Create associated scraped post
+            scraped_post = ScrapedPost(
+                post_url=post_url,
+                event_status=event_status,
+                scraped_at=datetime.now(ZoneInfo("Europe/Oslo"))
             )
-            session.add(raw_data_entry)
+            session.add(scraped_post)
             
             return event
         except Exception as e:
             # No need to explicitly rollback - the context manager handles it
-            logger.error(f"Failed to create event with raw data: {e}")
-            raise DatabaseError("Failed to create event with raw data") from e
+            logger.error(f"Failed to create event with scraped post: {e}")
+            raise DatabaseError("Failed to create event with scraped post") from e
 
 # Example 6: Complex Queries
 def get_upcoming_events(limit: int = 10) -> List[Event]:
@@ -192,7 +193,8 @@ if __name__ == "__main__":
     new_event = create_event_with_raw_data(
         title="Example Event",
         start_time=datetime.utcnow(),
-        raw_data={"source": "example", "data": "value"}
+        post_url="http://example.com",
+        event_status="active"
     )
     
     # Complex query

@@ -13,15 +13,57 @@ import json
 import re
 
 from src.models.event import Event
+from src.models.raw_scrape_data import ScrapedPost
 from src.utils.llm import is_event_post, parse_event_details
-from src.utils.data_processors.db_store_raw_data import db_store_batch
 from src.scrapers.facebook_event import FacebookEventScraper
+from src.db import db, DatabaseError, with_retry
 
 # Configuration
 # TODO: Disable and/or remove this flag
-SKIP_LLM_INTERPRETATION = True  # If True, only process posts with Facebook Event links
+SKIP_LLM_INTERPRETATION = False  # If True, only process posts with Facebook Event links
 
 logger = logging.getLogger(__name__)
+
+@with_retry()
+def _store_scraped_posts(posts: List[Dict[str, Any]]) -> List[int]:
+    """
+    Store scraped posts in the database.
+    
+    Args:
+        posts: List of dictionaries containing:
+            - post_url: URL of the scraped post
+            - event_status: Status indicating if the post is about an event
+                          ('contains-event', 'is-event-llm', 'not-event-llm')
+            - scraped_at: When the post was scraped
+            
+    Returns:
+        List[int]: List of IDs of stored entries
+        
+    Raises:
+        DatabaseError: If there is an error storing the data
+    """
+    stored_ids = []
+    
+    try:
+        with db.session() as session:
+            for post in posts:
+                post_entry = ScrapedPost(
+                    post_url=post['post_url'],
+                    event_status=post['event_status'],
+                    scraped_at=post['scraped_at']
+                )
+                session.add(post_entry)
+                session.flush()  # Get the ID without committing
+                stored_ids.append(post_entry.id)
+            
+            # All entries will be committed in a single transaction
+        
+        logger.info(f"Successfully stored {len(stored_ids)} posts in batch")
+        return stored_ids
+        
+    except Exception as e:
+        logger.error(f"Failed to store batch: {str(e)}")
+        raise DatabaseError(f"Failed to store batch: {str(e)}") from e
 
 def _parse_post_date(date_str: str) -> Optional[datetime]:
     """
@@ -130,29 +172,6 @@ def _has_facebook_event(post: Dict[str, Any]) -> bool:
     """
     return len(_extract_facebook_event_links(post)) > 0
 
-def _process_facebook_event_post(post: Dict[str, Any]) -> Optional[Event]:
-    """
-    Process a post that contains a Facebook Event attachment.
-    
-    This method will:
-    1. Extract the Event ID from the attachment URL
-    2. Fetch the Event details using BrightData's API
-    3. Create an Event object from the Event details
-    
-    Args:
-        post: Raw post data from Facebook
-        
-    Returns:
-        Optional[Event]: Event object if successful, None otherwise
-        
-    Raises:
-        NotImplementedError: Currently not implemented
-    """
-    event_links = _extract_facebook_event_links(post)
-    if event_links:
-        logger.info(f"Found Facebook Event links: {event_links}")
-    raise NotImplementedError("Facebook Event processing not implemented yet")
-
 def _extract_facebook_event_links(post: Dict[str, Any]) -> List[str]:
     """
     Extract all Facebook Event links from a post.
@@ -187,7 +206,7 @@ def _extract_facebook_event_links(post: Dict[str, Any]) -> List[str]:
     # Remove duplicates while preserving order
     return list(dict.fromkeys(event_links))
 
-def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
+def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
     """
     Process raw Facebook group data to extract events.
     
@@ -196,9 +215,13 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
     2. The LLM determines it to be an event based on its content
     
     The function will:
-    1. Split posts into two lists based on whether they contain Facebook Event links
-    2. Trigger a scrape for posts with Event links using FacebookEventScraper
-    3. Process non-Event posts with LLM if SKIP_LLM_INTERPRETATION is false
+    1. Filter out posts that have already been processed
+    2. Split remaining posts into two lists based on whether they contain Facebook Event links
+    3. Store posts with event links in the database
+    4. Trigger a scrape for posts with Event links using FacebookEventScraper
+    5. Process non-Event posts with LLM if SKIP_LLM_INTERPRETATION is false
+    6. Store posts processed by LLM with their determined event status
+    7. Parse posts into Event objects
     
     Args:
         data: Raw data from Facebook group scrape
@@ -207,6 +230,9 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
         List[Event]: List of extracted events
     """
     try:
+        # Store the timestamp when processing starts
+        processing_start_time = datetime.now(ZoneInfo("Europe/Oslo"))
+        
         posts = data.get('posts', [])
         if not posts:
             logger.warning("No posts found in data")
@@ -215,21 +241,60 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
         total_posts = len(posts)
         logger.info(f"Processing {total_posts} posts from Facebook")
         
-        # Split posts into two lists based on whether they contain Facebook Event links
-        posts_with_events = []
-        posts_without_events = []
+        # Get all existing post URLs from database
+        with db.session() as session:
+            existing_urls = {post.post_url for post in session.query(ScrapedPost).all()}
+        
+        # Filter out posts that have already been processed
+        posts_to_process = []
+        skipped_posts = []
         
         for post in posts:
-            if _has_facebook_event(post):
-                posts_with_events.append(post)
+            post_url = post.get('url', '')
+            if post_url in existing_urls:
+                skipped_posts.append(post)
             else:
-                posts_without_events.append(post)
+                posts_to_process.append(post)
         
-        logger.info(f"Found {len(posts_with_events)} posts with Facebook Event links")
+        if skipped_posts:
+            logger.info(f"Skipping {len(skipped_posts)} already processed posts")
+        
+        if not posts_to_process:
+            logger.info("No new posts to process")
+            return []
+        
+        logger.info(f"Processing {len(posts_to_process)} new posts")
+        
+        # Split posts into two lists based on whether they contain Facebook Event links
+        posts_with_event_links = []
+        posts_without_event_links = []
+        
+        for post in posts_to_process:
+            if _has_facebook_event(post):
+                posts_with_event_links.append(post)
+            else:
+                posts_without_event_links.append(post)
+        
+        logger.info(f"Found {len(posts_with_event_links)} posts with Facebook Event links")
+        
+        # Store posts with event links
+        posts_with_events_to_store = []
+        for post in posts_with_event_links:
+            post_url = post.get('url', '')
+            if post_url:
+                posts_with_events_to_store.append({
+                    'post_url': post_url,
+                    'event_status': 'contains-event',
+                    'scraped_at': processing_start_time
+                })
+        
+        if posts_with_events_to_store:
+            _store_scraped_posts(posts_with_events_to_store)
+            logger.info(f"Stored {len(posts_with_events_to_store)} posts with event links")
         
         # Extract event URLs from posts with events
         event_urls = []
-        for post in posts_with_events:
+        for post in posts_with_event_links:
             event_urls.extend(_extract_facebook_event_links(post))
         
         # Remove duplicates while preserving order
@@ -243,16 +308,15 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
                 logger.error("Failed to trigger Facebook Event scraping")
         
         # If SKIP_LLM_INTERPRETATION is true, we're done here
-        # TODO: Remove, and maybe disregard or change the raw_scrape_data storing in db
         if SKIP_LLM_INTERPRETATION:
             logger.info("Skipping LLM interpretation of non-Event posts")
             return []
         
         # Process posts without Event links using LLM
         events: List[Event] = []
-        raw_data_entries = []
+        posts_without_event_links_to_store = []
         
-        for post in posts_without_events:
+        for post in posts_without_event_links:
             try:
                 # Skip posts without content
                 if not post.get('content'):
@@ -265,10 +329,20 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
                     author=post.get('user_username_raw')
                 )
                 
+                # Add post to storage list with its event status
+                post_url = post.get('url', '')
+                if post_url:
+                    event_status = 'is-event-llm' if is_event else 'not-event-llm'
+                    posts_without_event_links_to_store.append({
+                        'post_url': post_url,
+                        'event_status': event_status,
+                        'scraped_at': processing_start_time
+                    })
+                
                 if is_event:
                     event_details = parse_event_details(
                         content=content,
-                        url=post.get('url', ''),
+                        url=post_url,
                         post_date=post.get('date_posted'),
                         author=post.get('user_username_raw')
                     )
@@ -279,27 +353,17 @@ def process_facebook_post_data(data: Dict[str, Any]) -> List[Event]:
                                 events.append(event)
                         except ValueError as e:
                             logger.warning(f"Could not create event: {e}")
-                
-                # Store raw data with processing status
-                raw_data_entry = {
-                    'raw_data': post,
-                    'processing_status': 'success' if is_event else 'not_an_event',
-                    'created_at': _parse_post_date(post.get('date_posted'))
-                }
-                raw_data_entries.append(raw_data_entry)
                     
             except Exception as e:
                 logger.error(f"Failed to process post: {e}")
                 continue
         
-        # Store raw data entries
-        if raw_data_entries:
-            try:
-                db_store_batch('brightdata_facebook_group', raw_data_entries)
-            except Exception as e:
-                logger.error(f"Failed to store raw data: {e}")
+        # Store posts processed by LLM
+        if posts_without_event_links_to_store:
+            _store_scraped_posts(posts_without_event_links_to_store)
+            logger.info(f"Stored {len(posts_without_event_links_to_store)} posts processed by LLM")
         
-        logger.info(f"Successfully processed {len(events)} events from {len(posts_without_events)} non-Event posts")
+        logger.info(f"Successfully processed {len(events)} events from {len(posts_without_event_links)} non-Event posts")
         return events
         
     except Exception as e:

@@ -1,8 +1,8 @@
 - [x] Run local test with ngrok
 
-- [ ] Change raw data table schema. Only store:
-    - [ ] Scraped post URLs or IDs
-    - [ ] Post-event-status determined by code: 'contains-event', 'is-event-llm' or 'not-event-llm'
+- [x] Change raw data table schema. Only store:
+    - [x] Scraped post URLs
+    - [x] Post-event-status determined by code: 'contains-event', 'is-event-llm' or 'not-event-llm'
 
 - [ ] DB Structure:
     - [ ] Keep source for all events
