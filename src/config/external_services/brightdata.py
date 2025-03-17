@@ -16,7 +16,9 @@ BRIGHTDATA_CONFIG = {
     'webhook_auth': os.environ.get('BRIGHTDATA_AUTHORIZATION_HEADER'),
 
     # Webhook configuration
-    'webhook_base_url': 'https://api.ifi.events' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
+    # TODO: Change to proper ifi.events domain
+    # 'webhook_base_url': 'https://api.ifi.events' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
+    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
     'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
     'webhook_format': 'json',
     'webhook_uncompressed': True,
