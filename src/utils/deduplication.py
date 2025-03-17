@@ -6,13 +6,7 @@ from ..models.event import Event
 from ..db import db, DatabaseError, with_retry
 from sqlalchemy.orm import Session
 
-# TODO: Refactor class structure
-# - Currently all methods are static and classes are just used as namespaces
-# - Should be refactored to module-level functions instead
-# - Keep the same public API (merge_events, check_duplicate_before_insert, are_events_duplicate)
-# - Make implementation details private with _ prefix
-# - Remove _EventDeduplication and _EventDeduplicationDB classes
-# This will make the code more idiomatic Python and better reflect its usage pattern
+# TODO: Validate, rethink and/or optimize merging and deduplication logic
 
 logger = logging.getLogger(__name__)
 
@@ -54,143 +48,132 @@ EVENT_MERGE_STRATEGIES: Dict[str, Callable[[Event, Event], Any]] = {
     )
 }
 
-class _EventDeduplication:
-    """Pure functional methods for event deduplication."""
-    
-    @staticmethod
-    def normalize_string(text: str) -> str:
-        """Normalize string based on configuration constants"""
-        if not text:
-            return ""
-        if IGNORE_CASE:
-            text = text.lower()
-        if NORMALIZE_WHITESPACE:
-            text = ' '.join(text.split())
-        return text
-    
-    @staticmethod
-    def calculate_title_similarity(title1: str, title2: str) -> float:
-        """
-        Calculate similarity between two titles.
-        Currently uses a simple ratio, but could be enhanced with better algorithms.
-        """
-        title1 = _EventDeduplication.normalize_string(title1)
-        title2 = _EventDeduplication.normalize_string(title2)
-        
-        return SequenceMatcher(None, title1, title2).ratio()
-    
-    @staticmethod
-    def are_events_duplicate(event1: Event, event2: Event) -> bool:
-        """
-        Check if two events are duplicates based on configured thresholds.
-        Returns True if events are considered duplicates, False otherwise.
-        """
-        # Check source if required
-        if REQUIRE_SAME_SOURCE:
-            if not event1.source_name or not event2.source_name or event1.source_name != event2.source_name:
-                return False
-        
-        # Check title similarity
-        title_similarity = _EventDeduplication.calculate_title_similarity(event1.title, event2.title)
-        if title_similarity < TITLE_SIMILARITY_THRESHOLD:
-            return False
-        
-        # Check times
-        if REQUIRE_EXACT_TIME:
-            if event1.start_time != event2.start_time or event1.end_time != event2.end_time:
-                return False
-        else:
-            time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
-            if abs(event1.start_time - event2.start_time) > time_window:
-                return False
-        
-        # Check location if required
-        if REQUIRE_SAME_LOCATION:
-            loc1 = _EventDeduplication.normalize_string(event1.location or "")
-            loc2 = _EventDeduplication.normalize_string(event2.location or "")
-            if loc1 != loc2:
-                return False
-        
-        return True
-    
-    @staticmethod
-    def merge_events(event1: Event, event2: Event) -> Event:
-        """
-        Merge two events, keeping the most complete information.
-        The first event is considered primary and its values are kept in case of conflicts.
-        """
-        # Determine which event is newer
-        event1_time = event1.fetched_at or datetime.min.replace(tzinfo=event1.start_time.tzinfo)
-        event2_time = event2.fetched_at or datetime.min.replace(tzinfo=event2.start_time.tzinfo)
-        
-        # Create a copy of the newer event as the base
-        base_event = event2 if event2_time > event1_time else event1
-        other_event = event1 if event2_time > event1_time else event2
-        
-        # Preserve source_name if both events are from the same source
-        source_name = None
-        if base_event.source_name == other_event.source_name:
-            source_name = base_event.source_name
-        
-        # Apply special merge strategies
-        for field, strategy in EVENT_MERGE_STRATEGIES.items():
-            try:
-                merged_value = strategy(base_event, other_event)
-                setattr(base_event, field, merged_value)
-            except Exception as e:
-                logger.warning(f"Failed to apply merge strategy for {field}: {e}")
-        
-        # Ensure source_name is preserved if both events were from the same source
-        if source_name:
-            base_event.source_name = source_name
-        
-        return base_event
+def _normalize_string(text: str) -> str:
+    """Normalize string based on configuration constants"""
+    if not text:
+        return ""
+    if IGNORE_CASE:
+        text = text.lower()
+    if NORMALIZE_WHITESPACE:
+        text = ' '.join(text.split())
+    return text
 
-class _EventDeduplicationDB:
-    """Database-dependent methods for event deduplication."""
+def _calculate_title_similarity(title1: str, title2: str) -> float:
+    """
+    Calculate similarity between two titles.
+    Currently uses a simple ratio, but could be enhanced with better algorithms.
+    """
+    title1 = _normalize_string(title1)
+    title2 = _normalize_string(title2)
     
-    @staticmethod
-    def check_duplicate_before_insert(new_event: Event, session: Session) -> Optional[Event]:
-        """
-        Check if an event already exists in the database.
-        This is a read-only operation, so no retry needed.
-        
-        Args:
-            new_event: Event to check for duplicates
-            session: Database session to use for the query
-            
-        Returns:
-            Matching event if found, None otherwise
-            
-        Raises:
-            DatabaseError: If database query fails
-        """
+    return SequenceMatcher(None, title1, title2).ratio()
+
+def _are_events_duplicate(event1: Event, event2: Event) -> bool:
+    """
+    Check if two events are duplicates based on configured thresholds.
+    Returns True if events are considered duplicates, False otherwise.
+    """
+    # Check source if required
+    if REQUIRE_SAME_SOURCE:
+        if not event1.source_name or not event2.source_name or event1.source_name != event2.source_name:
+            return False
+    
+    # Check title similarity
+    title_similarity = _calculate_title_similarity(event1.title, event2.title)
+    if title_similarity < TITLE_SIMILARITY_THRESHOLD:
+        return False
+    
+    # Check times
+    if REQUIRE_EXACT_TIME:
+        if event1.start_time != event2.start_time or event1.end_time != event2.end_time:
+            return False
+    else:
+        time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
+        if abs(event1.start_time - event2.start_time) > time_window:
+            return False
+    
+    # Check location if required
+    if REQUIRE_SAME_LOCATION:
+        loc1 = _normalize_string(event1.location or "")
+        loc2 = _normalize_string(event2.location or "")
+        if loc1 != loc2:
+            return False
+    
+    return True
+
+def _merge_events(event1: Event, event2: Event) -> Event:
+    """
+    Merge two events, keeping the most complete information.
+    The first event is considered primary and its values are kept in case of conflicts.
+    """
+    # Determine which event is newer
+    event1_time = event1.fetched_at or datetime.min.replace(tzinfo=event1.start_time.tzinfo)
+    event2_time = event2.fetched_at or datetime.min.replace(tzinfo=event2.start_time.tzinfo)
+    
+    # Create a copy of the newer event as the base
+    base_event = event2 if event2_time > event1_time else event1
+    other_event = event1 if event2_time > event1_time else event2
+    
+    # Preserve source_name if both events are from the same source
+    source_name = None
+    if base_event.source_name == other_event.source_name:
+        source_name = base_event.source_name
+    
+    # Apply special merge strategies
+    for field, strategy in EVENT_MERGE_STRATEGIES.items():
         try:
-            # Get potential duplicates based on time window
-            time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
-            start_time = new_event.start_time - time_window
-            end_time = new_event.start_time + time_window
-            
-            query = session.query(Event).filter(
-                Event.start_time.between(start_time, end_time)
-            )
-            
-            if REQUIRE_SAME_SOURCE:
-                query = query.filter(Event.source_name == new_event.source_name)
-            
-            potential_duplicates = query.all()
-            
-            # Check each potential duplicate
-            for existing_event in potential_duplicates:
-                if _EventDeduplication.are_events_duplicate(new_event, existing_event):
-                    logger.info(f"Found duplicate event: {existing_event.title}")
-                    return existing_event
-            
-            return None
-            
+            merged_value = strategy(base_event, other_event)
+            setattr(base_event, field, merged_value)
         except Exception as e:
-            logger.error(f"Error checking for duplicates: {e}")
-            raise DatabaseError(f"Failed to check for duplicates: {e}") from e
+            logger.warning(f"Failed to apply merge strategy for {field}: {e}")
+    
+    # Ensure source_name is preserved if both events were from the same source
+    if source_name:
+        base_event.source_name = source_name
+    
+    return base_event
+
+def _check_duplicate_before_insert(new_event: Event, session: Session) -> Optional[Event]:
+    """
+    Check if an event already exists in the database.
+    This is a read-only operation, so no retry needed.
+    
+    Args:
+        new_event: Event to check for duplicates
+        session: Database session to use for the query
+        
+    Returns:
+        Matching event if found, None otherwise
+        
+    Raises:
+        DatabaseError: If database query fails
+    """
+    try:
+        # Get potential duplicates based on time window
+        time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
+        start_time = new_event.start_time - time_window
+        end_time = new_event.start_time + time_window
+        
+        query = session.query(Event).filter(
+            Event.start_time.between(start_time, end_time)
+        )
+        
+        if REQUIRE_SAME_SOURCE:
+            query = query.filter(Event.source_name == new_event.source_name)
+        
+        potential_duplicates = query.all()
+        
+        # Check each potential duplicate
+        for existing_event in potential_duplicates:
+            if _are_events_duplicate(new_event, existing_event):
+                logger.info(f"Found duplicate event: {existing_event.title}")
+                return existing_event
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error checking for duplicates: {e}")
+        raise DatabaseError(f"Failed to check for duplicates: {e}") from e
 
 # Public API
 def merge_events(event1: Event, event2: Event) -> Event:
@@ -198,7 +181,7 @@ def merge_events(event1: Event, event2: Event) -> Event:
     Merge two events, keeping the most complete information.
     The first event is considered primary and its values are kept in case of conflicts.
     """
-    return _EventDeduplication.merge_events(event1, event2)
+    return _merge_events(event1, event2)
 
 def check_duplicate_before_insert(new_event: Event, session: Session) -> Optional[Event]:
     """
@@ -215,11 +198,11 @@ def check_duplicate_before_insert(new_event: Event, session: Session) -> Optiona
     Raises:
         DatabaseError: If database query fails
     """
-    return _EventDeduplicationDB.check_duplicate_before_insert(new_event, session)
+    return _check_duplicate_before_insert(new_event, session)
 
 def are_events_duplicate(event1: Event, event2: Event) -> bool:
     """
     Check if two events are duplicates based on configured thresholds.
     Returns True if events are considered duplicates, False otherwise.
     """
-    return _EventDeduplication.are_events_duplicate(event1, event2) 
+    return _are_events_duplicate(event1, event2) 
