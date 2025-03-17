@@ -17,10 +17,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # (7 posts from 2025-03-02 to 2025-03-06)
-DEFAULT_SNAPSHOT_ID = "s_m7xceqrg1y4ukprkuh"
+# DEFAULT_SNAPSHOT_ID = "s_m7xceqrg1y4ukprkuh"
 
 # (41 records from the last month up until 2025-03-14)
 # DEFAULT_SNAPSHOT_ID = "s_m88jyozu1telbj68yy"
+
+# 26 records fetched at March 17. 9PM
+DEFAULT_SNAPSHOT_ID = "s_m8diomf79gpzpiio6"
 
 def fetch_snapshot(snapshot_id: str) -> dict:
     """

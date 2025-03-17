@@ -290,7 +290,6 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
         
         if posts_with_events_to_store:
             _store_scraped_posts(posts_with_events_to_store)
-            logger.info(f"Stored {len(posts_with_events_to_store)} posts with event links")
         
         # Extract event URLs from posts with events
         event_urls = []

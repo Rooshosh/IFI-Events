@@ -16,8 +16,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 11 events 
-DEFAULT_SNAPSHOT_ID = "s_m8dd8tjd2cdyc0ffeh"
+# DEFAULT_SNAPSHOT_ID = "s_m8dd8tjd2cdyc0ffeh" # 11 events 
+DEFAULT_SNAPSHOT_ID = "s_m8diu1qp1nqaku1jbd" # 9 events fetched at March 17. 9PM
 
 def fetch_snapshot(snapshot_id: str) -> dict:
     """

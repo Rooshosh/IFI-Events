@@ -16,8 +16,13 @@ def setup_logging():
     
     # Configure the root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
     root_logger.addHandler(console_handler)
+    
+    # Set higher log levels for noisy components
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('openai').setLevel(logging.WARNING)
     
     # Configure specific loggers
     loggers = [
@@ -29,5 +34,5 @@ def setup_logging():
     
     for logger_name in loggers:
         logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         logger.addHandler(console_handler) 
