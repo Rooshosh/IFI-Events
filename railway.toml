@@ -8,7 +8,6 @@ healthcheckPath = "/"
 healthcheckTimeout = 100
 restartPolicyType = "on_failure"
 
-# (temprarily disabled)
-# [[cron]]
-# schedule = "0 */6 * * *"
-# command = "python scripts/get_new_data.py" 
+[[cron]]
+schedule = "0 */6 * * *"
+command = "python scripts/get_new_data.py" 
