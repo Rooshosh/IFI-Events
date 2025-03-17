@@ -14,35 +14,11 @@ BRIGHTDATA_CONFIG = {
     # Authentication
     'api_key': os.environ.get('BRIGHTDATA_API_KEY'),
     'webhook_auth': os.environ.get('BRIGHTDATA_AUTHORIZATION_HEADER'),
-
-    # Webhook configuration
-    # TODO: Change to proper ifi.events domain
-    # 'webhook_base_url': 'https://api.ifi.events' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
-    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
-    'webhook_format': 'json',
-    'webhook_uncompressed': True,
-
-    # Dataset configuration
-    'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Facebook - Posts by group URL dataset
-    'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'include_errors': True,
-
-    # TODO:
-    ## This below (days_to_fetch and num_of_posts
-    ##  would make sense to config directly from the FB scraper file!!
-    ## Potentially other params as well
-
-    # Fetch parameters
-    'days_to_fetch': 1,
-    'num_of_posts': 10,
 }
-
 
 def get_brightdata_config() -> Dict[str, Any]:
     """Get BrightData configuration with validation."""
     verify_brightdata_config()
-
     return BRIGHTDATA_CONFIG.copy()
 
 def verify_brightdata_config() -> bool:
@@ -51,17 +27,6 @@ def verify_brightdata_config() -> bool:
         raise ValueError("BRIGHTDATA_API_KEY environment variable is required")
     if not BRIGHTDATA_CONFIG['webhook_auth']:
         raise ValueError("BRIGHTDATA_AUTHORIZATION_HEADER environment variable is required")
-    if not BRIGHTDATA_CONFIG['group_url']:
-        raise ValueError("group_url is required")
-    if not BRIGHTDATA_CONFIG['webhook_base_url']:
-        raise ValueError("webhook_base_url is required")
-    if not BRIGHTDATA_CONFIG['webhook_endpoint']:
-        raise ValueError("webhook_endpoint is required")
-    if BRIGHTDATA_CONFIG['days_to_fetch'] < 1:
-        raise ValueError("days_to_fetch must be at least 1")
-    if BRIGHTDATA_CONFIG['num_of_posts'] < 1:
-        raise ValueError("num_of_posts must be at least 1")
-    
     return True
 
 def verify_brightdata_auth(auth_header: str) -> bool:

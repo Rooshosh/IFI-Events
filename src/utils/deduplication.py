@@ -73,33 +73,43 @@ def _are_events_duplicate(event1: Event, event2: Event) -> bool:
     Check if two events are duplicates based on configured thresholds.
     Returns True if events are considered duplicates, False otherwise.
     """
-    # Check source if required
-    if REQUIRE_SAME_SOURCE:
-        if not event1.source_name or not event2.source_name or event1.source_name != event2.source_name:
+    try:
+        # Check source if required
+        if REQUIRE_SAME_SOURCE:
+            if not event1.source_name or not event2.source_name or event1.source_name != event2.source_name:
+                return False
+        
+        # Check title similarity
+        title_similarity = _calculate_title_similarity(event1.title, event2.title)
+        if title_similarity < TITLE_SIMILARITY_THRESHOLD:
             return False
-    
-    # Check title similarity
-    title_similarity = _calculate_title_similarity(event1.title, event2.title)
-    if title_similarity < TITLE_SIMILARITY_THRESHOLD:
+        
+        # Check times
+        if REQUIRE_EXACT_TIME:
+            if event1.start_time != event2.start_time:
+                return False
+            # Only compare end times if both are present
+            if event1.end_time is not None and event2.end_time is not None:
+                if event1.end_time != event2.end_time:
+                    return False
+        else:
+            time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
+            if abs(event1.start_time - event2.start_time) > time_window:
+                return False
+        
+        # Check location if required
+        if REQUIRE_SAME_LOCATION:
+            loc1 = _normalize_string(event1.location or "")
+            loc2 = _normalize_string(event2.location or "")
+            if loc1 != loc2:
+                return False
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error in _are_events_duplicate: {e}", exc_info=True)
+        logger.error(f"Event1: {event1.title if event1 else 'None'}")
+        logger.error(f"Event2: {event2.title if event2 else 'None'}")
         return False
-    
-    # Check times
-    if REQUIRE_EXACT_TIME:
-        if event1.start_time != event2.start_time or event1.end_time != event2.end_time:
-            return False
-    else:
-        time_window = timedelta(minutes=TIME_WINDOW_MINUTES)
-        if abs(event1.start_time - event2.start_time) > time_window:
-            return False
-    
-    # Check location if required
-    if REQUIRE_SAME_LOCATION:
-        loc1 = _normalize_string(event1.location or "")
-        loc2 = _normalize_string(event2.location or "")
-        if loc1 != loc2:
-            return False
-    
-    return True
 
 def _merge_events(event1: Event, event2: Event) -> Event:
     """

@@ -11,9 +11,10 @@ from src.config.cors import CORS_CONFIG
 from src.utils.logging_config import setup_logging
 from src.db import db
 from .routes import (
+    brightdata_facebook_posts,
+    brightdata_facebook_events,
     event_queries,
     event_fetch_trigger,
-    brightdata_facebook_ifi_receiver,
     health
 )
 
@@ -55,7 +56,8 @@ def create_application() -> FastAPI:
     # Include routers with prefix
     app.include_router(event_queries.router, prefix="/api")
     app.include_router(event_fetch_trigger.router, prefix="/api")
-    app.include_router(brightdata_facebook_ifi_receiver.router, prefix="/webhook")
+    app.include_router(brightdata_facebook_posts.router, prefix="/webhook")
+    app.include_router(brightdata_facebook_events.router, prefix="/webhook")
 
     return app
 

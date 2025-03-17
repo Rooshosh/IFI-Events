@@ -6,11 +6,8 @@ import sys
 import logging
 import requests
 import json
-from pathlib import Path
 import argparse
-
-# Add src to Python path
-sys.path.append(str(Path(__file__).parent.parent))
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
@@ -19,9 +16,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default snapshot ID
 # (7 posts from 2025-03-02 to 2025-03-06)
 # DEFAULT_SNAPSHOT_ID = "s_m7xceqrg1y4ukprkuh"
+
 # (41 records from the last month up until 2025-03-14)
 DEFAULT_SNAPSHOT_ID = "s_m88jyozu1telbj68yy"
 
@@ -35,14 +32,12 @@ def fetch_snapshot(snapshot_id: str) -> dict:
     Returns:
         dict: The snapshot data
     """
-    api_key = os.getenv('BRIGHTDATA_API_KEY')
-    if not api_key:
-        raise ValueError("BRIGHTDATA_API_KEY environment variable is required")
+    config = get_brightdata_config()
     
-    url = f"https://api.brightdata.com/datasets/v3/snapshot/{snapshot_id}"
+    url = f"{config['base_url']}/snapshot/{snapshot_id}"
     headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config['api_key']}",
+        "Content-Type": config['content_type'],
     }
     params = {
         "format": "json",
@@ -127,10 +122,8 @@ def simulate_webhook(snapshot_id: str):
         # Format data for webhook
         webhook_data = format_data_for_webhook(raw_data)
         
-        # Get authorization header from environment
-        auth_header = os.getenv('BRIGHTDATA_AUTHORIZATION_HEADER')
-        if not auth_header:
-            raise ValueError("BRIGHTDATA_AUTHORIZATION_HEADER environment variable is required for webhook authentication")
+        # Get configuration
+        config = get_brightdata_config()
 
         # Send to webhook
         logger.info("Sending data to webhook...")
@@ -138,7 +131,7 @@ def simulate_webhook(snapshot_id: str):
             "http://localhost:8000/webhook/brightdata/facebook-group/results",
             json=webhook_data,
             headers={
-                "Authorization": auth_header
+                "Authorization": config['webhook_auth']
             }
         )
         
@@ -150,6 +143,13 @@ def simulate_webhook(snapshot_id: str):
         raise
 
 if __name__ == "__main__":
+    # Add project root to Python path only when running directly
+    project_root = Path(__file__).parent.parent.parent
+    sys.path.append(str(project_root))
+    
+    # Import after setting up Python path
+    from src.config.external_services.brightdata import get_brightdata_config
+    
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Simulate webhook data by fetching from a BrightData snapshot')
     parser.add_argument('snapshot_id', nargs='?', default=DEFAULT_SNAPSHOT_ID,

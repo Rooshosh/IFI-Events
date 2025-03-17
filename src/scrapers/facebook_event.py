@@ -1,12 +1,11 @@
-"""Scraper for Facebook group posts using BrightData's API."""
+"""Scraper for Facebook Events using BrightData's API."""
 
 import logging
 from typing import List, Optional, Dict, Any
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from src.scrapers.base import AsyncScraper
-from src.utils.fetched_raw_facebook_data_ids import get_facebook_post_urls
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
@@ -16,28 +15,22 @@ logger = logging.getLogger(__name__)
 # Scraper-specific configuration
 SCRAPER_CONFIG = {
     # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'http://localhost:8000',
-    # TODO: Rename endpoint to facebook-post(s) or smth
-    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
+    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else 'NGROK-URL',
+    'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
     'webhook_format': 'json',
     'webhook_uncompressed': True,
 
     # Dataset configuration
-    'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Facebook - Posts by group URL dataset
-    'group_url': 'https://www.facebook.com/groups/ifistudenter',
+    'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
     'include_errors': True,
-
-    # Fetch parameters
-    'days_to_fetch': 1,
-    'num_of_posts': 10,
 }
 
-class FacebookGroupScraper(AsyncScraper):
+class FacebookEventScraper(AsyncScraper):
     """
-    Scraper for Facebook group posts using BrightData's API.
+    Scraper for Facebook Events using BrightData's API.
     
     This scraper:
-    1. Uses BrightData's 'Facebook - Posts by group URL' dataset to fetch posts
+    1. Uses BrightData's 'Facebook - Event by URL' dataset to fetch event details
     2. Sends results to a configured webhook for processing
     
     Configuration is loaded from src.config.external_services.brightdata
@@ -59,73 +52,41 @@ class FacebookGroupScraper(AsyncScraper):
             "Authorization": f"Bearer {self.brightdata_config['api_key']}",
             "Content-Type": self.brightdata_config['content_type'],
         }
-        
-        # Calculate date range
-        self.end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        self.start_date = self.end_date - timedelta(days=SCRAPER_CONFIG['days_to_fetch'] - 1)
-        
-        # Format dates for API
-        self.start_date_str = self.start_date.strftime('%Y-%m-%d')
-        self.end_date_str = self.end_date.strftime('%Y-%m-%d')
     
     def name(self) -> str:
         """Return the name of the scraper"""
-        return "Facebook (IFI-studenter)"
+        return "Facebook Events"
     
-    def _extract_post_id(self, url: str) -> Optional[str]:
-        """Extract the post ID from a Facebook post URL."""
+    def _extract_event_id(self, url: str) -> Optional[str]:
+        """Extract the event ID from a Facebook event URL."""
         if not url:
             return None
         try:
-            return url.split('/posts/')[-1].strip('/')
+            return url.split('/events/')[-1].strip('/')
         except Exception:
-            logger.warning(f"Could not extract post ID from URL: {url}")
+            logger.warning(f"Could not extract event ID from URL: {url}")
             return None
     
-    def _get_excluded_post_ids(self) -> List[str]:
+    def initialize_data_fetch(self, event_urls: List[str]) -> bool:
         """
-        Get list of post IDs from raw data that we've already processed.
-        
-        Returns:
-            List[str]: List of post IDs to exclude from scraping
-        """
-        # Get URLs from raw data
-        urls = get_facebook_post_urls(start_date=self.start_date, end_date=self.end_date)
-        
-        # Extract post IDs from URLs
-        post_ids = []
-        for url in urls:
-            post_id = self._extract_post_id(url)
-            if post_id:
-                post_ids.append(post_id)
-        
-        logger.info(f"Found {len(post_ids)} already processed posts to exclude")
-        return post_ids
-    
-    def initialize_data_fetch(self) -> bool:
-        """
-        Trigger a new scrape of the Facebook group.
+        Trigger a new scrape of the specified Facebook Events.
         Results will be sent to the configured webhook.
         
+        Args:
+            event_urls: List of Facebook Event URLs to scrape
+            
         Returns:
             bool: True if successful, False otherwise.
         """
         try:
-            # Get list of post IDs to exclude
-            posts_to_exclude = self._get_excluded_post_ids()
+            if not event_urls:
+                logger.warning("No event URLs provided")
+                return False
             
-            # Prepare request data
-            data = [{
-                "url": SCRAPER_CONFIG['group_url'],
-                "start_date": self.start_date_str,
-                "end_date": self.end_date_str,
-                "num_of_posts": SCRAPER_CONFIG['num_of_posts'],
-                "posts_to_not_include": posts_to_exclude
-            }]
+            # Prepare request data - just need the URLs
+            data = [{"url": url} for url in event_urls]
             
-            logger.info(f"Scraping up to {SCRAPER_CONFIG['num_of_posts']} posts from {self.start_date_str} to {self.end_date_str}")
-            if posts_to_exclude:
-                logger.info(f"Excluding {len(posts_to_exclude)} already processed posts")
+            logger.info(f"Scraping {len(event_urls)} Facebook Events")
             
             # Prepare request parameters
             params = {
@@ -162,4 +123,4 @@ class FacebookGroupScraper(AsyncScraper):
             return False
         except Exception as e:
             logger.error(f"Other error: {str(e)}")
-            return False
+            return False 
