@@ -10,10 +10,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
 import json
+import re
 
 from src.models.event import Event
 from src.utils.llm import is_event_post, parse_event_details
 from src.utils.data_processors.db_store_raw_data import db_store_batch
+
+# TODO: Prob use this system of a separate data processor script for the other scrapers as well
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +111,86 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
         logger.error(f"Error creating event from post: {e}")
         raise
 
+def _has_facebook_event(post: Dict[str, Any]) -> bool:
+    """
+    Check if a post contains a Facebook Event link.
+    
+    A post can contain an Event link in two ways:
+    1. As an attachment of type 'ProfilePicAttachmentMedia' with an Event URL
+    2. As a direct link in the post content
+    
+    Args:
+        post: Raw post data from Facebook
+        
+    Returns:
+        bool: True if the post contains a Facebook Event link
+    """
+    return len(_extract_facebook_event_links(post)) > 0
+
+def _process_facebook_event_post(post: Dict[str, Any]) -> Optional[Event]:
+    """
+    Process a post that contains a Facebook Event attachment.
+    
+    This method will:
+    1. Extract the Event ID from the attachment URL
+    2. Fetch the Event details using BrightData's API
+    3. Create an Event object from the Event details
+    
+    Args:
+        post: Raw post data from Facebook
+        
+    Returns:
+        Optional[Event]: Event object if successful, None otherwise
+        
+    Raises:
+        NotImplementedError: Currently not implemented
+    """
+    event_links = _extract_facebook_event_links(post)
+    if event_links:
+        logger.info(f"Found Facebook Event links: {event_links}")
+    raise NotImplementedError("Facebook Event processing not implemented yet")
+
+def _extract_facebook_event_links(post: Dict[str, Any]) -> List[str]:
+    """
+    Extract all Facebook Event links from a post.
+    
+    A post can contain Event links in two ways:
+    1. As attachments of type 'ProfilePicAttachmentMedia' with Event URLs
+    2. As direct links in the post content
+    
+    Args:
+        post: Raw post data from Facebook
+        
+    Returns:
+        List[str]: List of Facebook Event URLs found in the post
+    """
+    event_links = []
+    
+    # Check attachments for Event links
+    attachments = post.get('attachments', [])
+    for attachment in attachments:
+        # Check for Event attachment
+        if attachment.get('type') == 'ProfilePicAttachmentMedia':
+            attachment_url = attachment.get('attachment_url', '')
+            if attachment_url.startswith('https://www.facebook.com/events/'):
+                event_links.append(attachment_url)
+    
+    # Check post content for Event links
+    content = post.get('content', '')
+    # Look for URLs that match the Facebook Event pattern
+    event_urls = re.findall(r'https://www\.facebook\.com/events/\d+/', content)
+    event_links.extend(event_urls)
+    
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(event_links))
+
 def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
     """
     Process raw Facebook group data to extract events.
+    
+    A post is considered an event if:
+    1. It contains a Facebook Event attachment, OR
+    2. The LLM determines it to be an event based on its content
     
     Args:
         data: Raw data from Facebook group scrape
@@ -127,70 +207,54 @@ def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
         total_posts = len(posts)
         logger.info(f"Processing {total_posts} posts from Facebook")
         
-        # Process each post
         events: List[Event] = []
         raw_data_entries = []
-        processed_count = 0
         
         for post in posts:
             try:
-                processed_count += 1
-                logger.info(f"Processing post {processed_count}/{total_posts}")
-                
                 # Skip posts without content
                 if not post.get('content'):
-                    logger.warning("Skipping post without content")
                     continue
                 
-                # Prepare post content for LLM analysis
-                content = f"{post.get('post_external_title', '')}\n\n{post.get('content', '')}"
-                url = post.get('url', '')
-                post_date = post.get('date_posted')
-                author = post.get('user_username_raw')
+                # Try to create event from Facebook Event link first
+                event = None
+                if _has_facebook_event(post):
+                    try:
+                        event = _process_facebook_event_post(post)
+                    except NotImplementedError:
+                        logger.warning("Facebook Event processing not implemented yet")
                 
-                # First, determine if this is an event
-                is_event, event_explanation = is_event_post(
-                    content=content,
-                    post_date=post_date,
-                    author=author
-                )
-                
-                # Set processing status based on event detection
-                processing_status = 'success' if is_event else 'not_an_event'
-                
-                # If it's an event, extract detailed information
-                if is_event:
-                    event_details = parse_event_details(
+                # If no Facebook Event, try LLM processing
+                if not event:
+                    content = f"{post.get('post_external_title', '')}\n\n{post.get('content', '')}"
+                    is_event, _ = is_event_post(
                         content=content,
-                        url=url,
-                        post_date=post_date,
-                        author=author
+                        post_date=post.get('date_posted'),
+                        author=post.get('user_username_raw')
                     )
-                    if event_details:
-                        try:
-                            # Create event object
-                            event = _create_event_from_post(post, event_details)
-                            events.append(event)
-                            logger.info(f"Created event: {event.title} ({event.start_time})")
-                        except ValueError as e:
-                            logger.warning(f"Could not create event: {e}")
-                            processing_status = 'failed'
-                    else:
-                        logger.warning(f"Failed to parse event details for post: {post.get('post_external_title', 'No title')}")
-                        processing_status = 'failed'
-                else:
-                    logger.debug(f"Post not identified as event: {post.get('post_external_title', 'No title')}")
+                    
+                    if is_event:
+                        event_details = parse_event_details(
+                            content=content,
+                            url=post.get('url', ''),
+                            post_date=post.get('date_posted'),
+                            author=post.get('user_username_raw')
+                        )
+                        if event_details:
+                            try:
+                                event = _create_event_from_post(post, event_details)
+                            except ValueError as e:
+                                logger.warning(f"Could not create event: {e}")
                 
-                # Get the post's creation date
-                created_at = None
-                if post.get('date_posted'):
-                    created_at = _parse_post_date(post['date_posted'])
+                # If we successfully created an event, add it to the list
+                if event:
+                    events.append(event)
                 
-                # Store raw data with the post's creation date
+                # Store raw data with processing status
                 raw_data_entry = {
                     'raw_data': post,
-                    'processing_status': processing_status,
-                    'created_at': created_at
+                    'processing_status': 'success' if event else 'not_an_event',
+                    'created_at': _parse_post_date(post.get('date_posted'))
                 }
                 raw_data_entries.append(raw_data_entry)
                     
@@ -204,7 +268,6 @@ def process_facebook_group_data(data: Dict[str, Any]) -> List[Event]:
                 db_store_batch('brightdata_facebook_group', raw_data_entries)
             except Exception as e:
                 logger.error(f"Failed to store raw data: {e}")
-                # Continue processing even if storage fails
         
         logger.info(f"Successfully processed {len(events)} events from {len(posts)} posts")
         return events
