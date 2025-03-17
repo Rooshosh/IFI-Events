@@ -26,6 +26,11 @@ BRIGHTDATA_CONFIG = {
     'group_url': 'https://www.facebook.com/groups/ifistudenter',
     'include_errors': True,
 
+    # TODO:
+    ## This below (days_to_fetch and num_of_posts
+    ##  would make sense to config directly from the FB scraper file!!
+    ## Potentially other params as well
+
     # Fetch parameters
     'days_to_fetch': 1,
     'num_of_posts': 10,
