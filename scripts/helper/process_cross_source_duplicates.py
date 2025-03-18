@@ -6,6 +6,9 @@ import sys
 import os
 from pathlib import Path
 
+# Set environment to production before importing any modules
+os.environ['ENVIRONMENT'] = 'production'
+
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
@@ -54,6 +57,10 @@ def process_existing_events():
     """Process all existing events to find and handle cross-source duplicates."""
     try:
         with db.session() as session:
+            # Log the database URL (safely)
+            engine_url = str(session.get_bind().url)
+            logger.info(f"Using database URL: {engine_url}")
+            
             # Get all events
             events = session.query(Event).all()
             total_events = len(events)
@@ -81,6 +88,10 @@ def process_existing_events():
                         parent_set_count += 1
                 
                 processed_count += 1
+            
+            # Explicitly commit the changes
+            session.commit()
+            logger.info("Changes committed to database")
             
             logger.info(f"Finished processing {processed_count} events")
             logger.info(f"Set parent_id for {parent_set_count} events")
