@@ -11,13 +11,14 @@ router = APIRouter(tags=["events"])
 
 @router.get("/events")
 async def get_active_events() -> List[Dict[str, Any]]:
-    """Get all future and ongoing events."""
+    """Get all future and ongoing events that are not duplicates (no parent_id)."""
     try:
         with db.session() as session:
             now = datetime.now()
             events = session.query(Event).filter(
-                (Event.start_time > now) |  # Future events
-                ((Event.start_time <= now) & (Event.end_time >= now))  # Ongoing events
+                Event.parent_id.is_(None) &  # Only non-duplicate events
+                ((Event.start_time > now) |  # Future events
+                (Event.start_time <= now) & (Event.end_time >= now))  # Ongoing events
             ).order_by(Event.start_time).all()
             return [event.to_dict() for event in events]
     except Exception as e:

@@ -28,6 +28,16 @@ class BaseScraper(ABC):
         """
         pass
 
+    def get_source_name(self) -> Optional[str]:
+        """
+        Get the source name for this scraper from the data sources configuration.
+        
+        Returns:
+            Optional[str]: The source name if found in configuration, None otherwise
+        """
+        from src.config.data_sources import get_source_name_by_scraper
+        return get_source_name_by_scraper(self.__class__.__module__ + '.' + self.__class__.__name__)
+
 class SyncScraper(BaseScraper):
     """
     Base class for synchronous scrapers that directly return events.

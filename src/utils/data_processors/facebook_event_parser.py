@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from src.models.event import Event
+from src.scrapers.facebook_event import FacebookEventScraper
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,10 @@ def _create_event_from_data(event_data: Dict[str, Any]) -> Optional[Event]:
         # Get attachment (main image)
         attachment = event_data.get('main_image_downloadable')
         
+        # Get source name from scraper
+        scraper = FacebookEventScraper()
+        source_name = scraper.name()
+        
         # Create event
         event = Event(
             title=title,
@@ -111,7 +116,7 @@ def _create_event_from_data(event_data: Dict[str, Any]) -> Optional[Event]:
             end_time=end_time,  # Will be None if duration was invalid or missing
             location=location,
             source_url=url,
-            source_name="Facebook Events",
+            source_name=source_name,
             fetched_at=datetime.now(ZoneInfo("Europe/Oslo")),
             author=author,
             attachment=attachment

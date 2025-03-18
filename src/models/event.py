@@ -2,8 +2,8 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from sqlalchemy import Column, Integer, String, Text, DateTime, event, JSON
-from sqlalchemy.orm import validates
+from sqlalchemy import Column, Integer, String, Text, DateTime, event, JSON, ForeignKey
+from sqlalchemy.orm import validates, relationship
 from sqlalchemy import event as sa_event
 import json
 
@@ -47,6 +47,7 @@ class Event(Base):
         food: Description of food/refreshments if provided (optional)
         attachment: URL to the event's primary image/attachment
         author: Name of the student club or person that created the event (optional)
+        parent_id: ID of the parent event if this is a child event (optional)
     """
     __tablename__ = 'events'
     
@@ -70,6 +71,10 @@ class Event(Base):
     food = Column(String)
     attachment = Column(String)  # URL to the event's primary image/attachment
     author = Column(String)  # Student club or person that created the event
+    parent_id = Column(Integer, ForeignKey('events.id'), nullable=True)  # Reference to parent event
+    
+    # Relationships
+    parent = relationship('Event', remote_side=[id], backref='children')
     
     def __init__(self, **kwargs):
         """Initialize an Event with the given attributes."""
@@ -116,7 +121,8 @@ class Event(Base):
             registration_url=data.get('registration_url'),
             food=data.get('food'),
             attachment=data.get('attachment'),
-            author=data.get('author')
+            author=data.get('author'),
+            parent_id=data.get('parent_id')
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -138,7 +144,8 @@ class Event(Base):
             'registration_url': self.registration_url,
             'food': self.food,
             'attachment': self.attachment,
-            'author': self.author
+            'author': self.author,
+            'parent_id': self.parent_id
         }
     
     def __str__(self) -> str:
@@ -172,6 +179,8 @@ class Event(Base):
             lines.append(f"Registration URL: {self.registration_url}")
         if self.attachment:
             lines.append(f"Attachment: {self.attachment}")
+        if self.parent_id:
+            lines.append(f"Parent Event ID: {self.parent_id}")
         
         # Add description at the end
         if self.description:
