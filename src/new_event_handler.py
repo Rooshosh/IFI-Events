@@ -8,8 +8,11 @@ from .models.event import Event
 from .db import db, DatabaseError, with_retry
 from .utils.deduplication import (
     merge_events,
-    check_duplicate_before_insert
+    check_duplicate_before_insert,
+    are_events_cross_source_duplicate
 )
+from sqlalchemy.orm import Session
+from .config.data_sources import compare_source_priorities
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +74,46 @@ def process_new_events(
                     session.add(event)
                     new_count += 1
                     logger.info(f"Added new event: {event.title}")
+                    
+                    # Check for duplicates from other sources
+                    check_and_process_cross_source_duplicates(event, session)
             
             logger.info(f"Processed {len(events)} events: {new_count} new, {update_count} updated")
             return new_count, update_count
             
     except Exception as e:
         logger.error(f"Error processing events: {e}")
-        raise DatabaseError(f"Failed to process events: {e}") from e 
+        raise DatabaseError(f"Failed to process events: {e}") from e
+
+
+def check_and_process_cross_source_duplicates(new_event: Event, session: Session):
+    """
+    Check for duplicates from other sources and process them.
+    """
+    potential_duplicates = session.query(Event).filter(Event.id != new_event.id).all()
+    for existing_event in potential_duplicates:
+        if are_events_cross_source_duplicate(new_event, existing_event):
+            process_cross_source_duplicate(new_event, existing_event, session)
+
+
+def process_cross_source_duplicate(event1: Event, event2: Event, session: Session):
+    """
+    Process a duplicate event from another source by comparing source priorities.
+    """
+    higher_priority_event, lower_priority_event = compare_source_priority(event1, event2)
+    
+    # Find the topmost parent
+    topmost_parent = higher_priority_event
+    while topmost_parent.parent_id is not None:
+        topmost_parent = session.query(Event).get(topmost_parent.parent_id)
+    
+    # Assign the topmost parent to the lower priority event
+    lower_priority_event.parent_id = topmost_parent.id
+
+
+def compare_source_priority(event1: Event, event2: Event) -> Tuple[Event, Event]:
+    """
+    Compare the priority of two event sources and return them in order of priority.
+    """
+    comparison = compare_source_priorities(event1.source_name, event2.source_name)
+    return (event1, event2) if comparison >= 0 else (event2, event1) 
