@@ -33,7 +33,10 @@ class PeoplyScraper(SyncScraper):
     
     def name(self) -> str:
         """Return the name of the scraper"""
-        return "Peoply"
+        source_name = self.get_source_name()
+        if not source_name:
+            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
+        return source_name
     
     def _get_api_url(self) -> str:
         """Generate the URL for peoply.app events API with the current date"""

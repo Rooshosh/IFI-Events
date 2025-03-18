@@ -1,7 +1,7 @@
 """Configuration for event sources and their scrapers."""
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 import os
 
 # Internal imports - environment must be first
@@ -23,20 +23,23 @@ class ScraperRegistration:
     enabled: bool
     scraper_class: str
 
-# Registry of available scrapers
+# Registry of available scrapers for fetching new data
 SOURCES = {
-    'peoply': ScraperRegistration(
+    'Peoply': ScraperRegistration(
         enabled=True,
         scraper_class='src.scrapers.peoply.PeoplyScraper'
     ),
-    'navet': ScraperRegistration(
+    'Navet': ScraperRegistration(
         enabled=True,
         scraper_class='src.scrapers.navet.NavetScraper'
     ),
-    # TODO: Maybe refactor since Facebook scraper is async, but can also just use like this
-    'facebook': ScraperRegistration(
+    'Facebook Post': ScraperRegistration(
         enabled=True,
         scraper_class='src.scrapers.facebook.FacebookGroupScraper'
+    ),
+    'Facebook Event': ScraperRegistration(
+        enabled=False,
+        scraper_class='src.scrapers.facebook_event.FacebookEventScraper'
     )
 }
 
@@ -47,4 +50,19 @@ def get_enabled_sources() -> Dict[str, ScraperRegistration]:
     Returns:
         Dict[str, ScraperRegistration]: Dictionary of source_id -> registration for all enabled scrapers
     """
-    return {k: v for k, v in SOURCES.items() if v.enabled} 
+    return {k: v for k, v in SOURCES.items() if v.enabled}
+
+def get_source_name_by_scraper(scraper_class: str) -> Optional[str]:
+    """
+    Get the source name for a given scraper class.
+    
+    Args:
+        scraper_class: The full path to the scraper class (e.g., 'src.scrapers.peoply.PeoplyScraper')
+        
+    Returns:
+        Optional[str]: The source name if found, None otherwise
+    """
+    for source_name, registration in SOURCES.items():
+        if registration.scraper_class == scraper_class:
+            return source_name
+    return None 

@@ -75,7 +75,10 @@ class FacebookGroupScraper(AsyncScraper):
     
     def name(self) -> str:
         """Return the name of the scraper"""
-        return "Facebook (IFI-studenter)"
+        source_name = self.get_source_name()
+        if not source_name:
+            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
+        return source_name
     
     def _extract_post_id(self, url: str) -> Optional[str]:
         """Extract the post ID from a Facebook post URL."""

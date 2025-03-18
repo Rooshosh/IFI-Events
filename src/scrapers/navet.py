@@ -40,7 +40,10 @@ class NavetScraper(SyncScraper):
     
     def name(self) -> str:
         """Return the name of the scraper"""
-        return "Navet"
+        source_name = self.get_source_name()
+        if not source_name:
+            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
+        return source_name
     
     def _fetch_html(self, url: str) -> str:
         """Fetch HTML content from a URL"""

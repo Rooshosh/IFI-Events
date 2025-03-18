@@ -16,6 +16,7 @@ from src.models.event import Event
 from src.models.raw_scrape_data import ScrapedPost
 from src.utils.llm import is_event_post, parse_event_details
 from src.scrapers.facebook_event import FacebookEventScraper
+from src.scrapers.facebook import FacebookGroupScraper
 from src.db import db, DatabaseError, with_retry
 
 # Configuration
@@ -134,6 +135,10 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
         # Get URL (optional)
         post_url = post.get('url', '')
         
+        # Get source name from scraper
+        scraper = FacebookGroupScraper()
+        source_name = scraper.name()
+        
         # Create event
         event = Event(
             title=title,
@@ -142,7 +147,7 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
             end_time=end_time,
             location=location,
             source_url=post_url,
-            source_name="Facebook (IFI-studenter)",
+            source_name=source_name,
             fetched_at=datetime.now(ZoneInfo("Europe/Oslo"))
         )
         
