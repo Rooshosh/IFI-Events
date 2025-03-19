@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Header, Body, BackgroundTasks
 
 from ...models.event import Event
 from ...new_event_handler import process_new_events
-from ...utils.data_processors.facebook_post_processor import process_facebook_post_scrape_data
+from ...utils.data_processors.facebook_post_processor_parser import process_facebook_post_scrape_data
 from ...config.external_services import verify_brightdata_auth
 
 logger = logging.getLogger(__name__)

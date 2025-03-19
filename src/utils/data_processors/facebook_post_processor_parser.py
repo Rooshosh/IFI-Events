@@ -59,12 +59,11 @@ def _store_scraped_posts(posts: List[Dict[str, Any]]) -> List[int]:
             
             # All entries will be committed in a single transaction
         
-        logger.info(f"Successfully stored {len(stored_ids)} posts in batch")
         return stored_ids
         
     except Exception as e:
-        logger.error(f"Failed to store batch: {str(e)}")
-        raise DatabaseError(f"Failed to store batch: {str(e)}") from e
+        logger.error(f"Failed to store raw data batch: {str(e)}")
+        raise DatabaseError(f"Failed to store raw data batch: {str(e)}") from e
 
 def _parse_post_date(date_str: str) -> Optional[datetime]:
     """
@@ -365,7 +364,6 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
         # Store posts processed by LLM
         if posts_without_event_links_to_store:
             _store_scraped_posts(posts_without_event_links_to_store)
-            logger.info(f"Stored {len(posts_without_event_links_to_store)} posts processed by LLM")
         
         logger.info(f"Successfully processed {len(events)} events from {len(posts_without_event_links)} non-Event posts")
         return events

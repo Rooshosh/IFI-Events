@@ -13,19 +13,6 @@ from src.config.environment import IS_PRODUCTION_ENVIRONMENT
 
 logger = logging.getLogger(__name__)
 
-# Scraper-specific configuration
-SCRAPER_CONFIG = {
-    # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
-    'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
-    'webhook_format': 'json',
-    'webhook_uncompressed': True,
-
-    # Dataset configuration
-    'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
-    'include_errors': True,
-}
-
 class FacebookEventScraper(AsyncScraper):
     """
     Scraper for Facebook Events using BrightData's API.
@@ -44,7 +31,20 @@ class FacebookEventScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
-        if not IS_PRODUCTION_ENVIRONMENT and not SCRAPER_CONFIG['webhook_base_url']:
+        # Scraper-specific configuration
+        self.scraper_config = {
+            # Webhook configuration
+            'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
+            'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
+            'webhook_format': 'json',
+            'webhook_uncompressed': True,
+
+            # Dataset configuration
+            'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
+            'include_errors': True,
+        }
+            
+        if not IS_PRODUCTION_ENVIRONMENT and not self.scraper_config['webhook_base_url']:
             raise ValueError("NGROK_URL environment variable must be set in development mode")
             
         # Initialize BrightData configuration
@@ -97,17 +97,17 @@ class FacebookEventScraper(AsyncScraper):
             
             # Prepare request parameters
             params = {
-                "dataset_id": SCRAPER_CONFIG['dataset_id'],
-                "include_errors": str(SCRAPER_CONFIG['include_errors']).lower(),
+                "dataset_id": self.scraper_config['dataset_id'],
+                "include_errors": str(self.scraper_config['include_errors']).lower(),
             }
             
             # Add webhook configuration
-            webhook_url = f"{SCRAPER_CONFIG['webhook_base_url']}{SCRAPER_CONFIG['webhook_endpoint']}"
+            webhook_url = f"{self.scraper_config['webhook_base_url']}{self.scraper_config['webhook_endpoint']}"
             params.update({
                 "endpoint": webhook_url,
                 "auth_header": self.brightdata_config['webhook_auth'],
-                "format": SCRAPER_CONFIG['webhook_format'],
-                "uncompressed_webhook": str(SCRAPER_CONFIG['webhook_uncompressed']).lower(),
+                "format": self.scraper_config['webhook_format'],
+                "uncompressed_webhook": str(self.scraper_config['webhook_uncompressed']).lower(),
             })
             logger.info(f"Webhook configured to send results to: {webhook_url}")
             
