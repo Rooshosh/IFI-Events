@@ -16,7 +16,7 @@ from src.models.event import Event
 from src.models.raw_scrape_data import ScrapedPost
 from src.utils.llm import is_event_post, parse_event_details
 from src.scrapers.facebook_event import FacebookEventScraper
-from src.scrapers.facebook import FacebookGroupScraper
+from src.scrapers.facebook_post import FacebookGroupScraper
 from src.db import db, DatabaseError, with_retry
 
 # Configuration
@@ -365,7 +365,7 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
         if posts_without_event_links_to_store:
             _store_scraped_posts(posts_without_event_links_to_store)
         
-        logger.info(f"Successfully processed {len(events)} events from {len(posts_without_event_links)} non-Event posts")
+        logger.info(f"Successfully identified {len(events)} events from {len(posts_without_event_links)} posts without direct event-links")
         return events
         
     except Exception as e:

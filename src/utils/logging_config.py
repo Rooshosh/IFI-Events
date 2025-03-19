@@ -35,4 +35,4 @@ def setup_logging():
     for logger_name in loggers:
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.INFO)
-        logger.addHandler(console_handler) 
+        # Don't add handler here since it's already handled by root logger 

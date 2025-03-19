@@ -34,7 +34,6 @@ class FacebookEventScraper(AsyncScraper):
         # Scraper-specific configuration
         self.scraper_config = {
             # Webhook configuration
-            'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
             'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
             'webhook_format': 'json',
             'webhook_uncompressed': True,
@@ -43,9 +42,6 @@ class FacebookEventScraper(AsyncScraper):
             'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
             'include_errors': True,
         }
-            
-        if not IS_PRODUCTION_ENVIRONMENT and not self.scraper_config['webhook_base_url']:
-            raise ValueError("NGROK_URL environment variable must be set in development mode")
             
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
@@ -56,6 +52,13 @@ class FacebookEventScraper(AsyncScraper):
             "Authorization": f"Bearer {self.brightdata_config['api_key']}",
             "Content-Type": self.brightdata_config['content_type'],
         }
+    
+    def _get_webhook_url(self) -> str:
+        """Get the webhook URL at runtime."""
+        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL')
+        if not webhook_base_url and not IS_PRODUCTION_ENVIRONMENT:
+            raise ValueError("NGROK_URL environment variable must be set in development mode")
+        return f"{webhook_base_url}{self.scraper_config['webhook_endpoint']}"
     
     def name(self) -> str:
         """Return the name of the scraper"""
@@ -102,7 +105,7 @@ class FacebookEventScraper(AsyncScraper):
             }
             
             # Add webhook configuration
-            webhook_url = f"{self.scraper_config['webhook_base_url']}{self.scraper_config['webhook_endpoint']}"
+            webhook_url = self._get_webhook_url()
             params.update({
                 "endpoint": webhook_url,
                 "auth_header": self.brightdata_config['webhook_auth'],

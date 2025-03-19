@@ -18,7 +18,7 @@ from pathlib import Path
 # Add src to Python path when running directly
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.scrapers.facebook import FacebookGroupScraper
+from src.scrapers.facebook_post import FacebookGroupScraper
 from src.scrapers.navet import NavetScraper
 from src.scrapers.peoply import PeoplyScraper
 from src.new_event_handler import process_new_events
