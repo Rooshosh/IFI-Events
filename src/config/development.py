@@ -5,4 +5,4 @@ This module contains configuration settings specific to the development environm
 
 # Development webhook base URL
 # This is used by scrapers to send webhook callbacks in development mode
-DEVELOPMENT_FORWARDED_URL = "https://b925-62-209-83-88.ngrok-free.app" 
+DEVELOPMENT_FORWARDED_URL = "https://f503-62-209-83-88.ngrok-free.app"

@@ -23,3 +23,6 @@ data/
 
 # Downloaded logs directory
 downloaded_logs/
+
+# Supabase
+supabase/
