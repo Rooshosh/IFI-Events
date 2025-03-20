@@ -13,26 +13,9 @@ from src.models.raw_scrape_data import ScrapedPost
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+from src.config.development import DEVELOPMENT_FORWARDED_URL
 
 logger = logging.getLogger(__name__)
-
-# Scraper-specific configuration
-SCRAPER_CONFIG = {
-    # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
-    'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
-    'webhook_format': 'json',
-    'webhook_uncompressed': True,
-
-    # Dataset configuration
-    'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Facebook - Posts by group URL dataset
-    'group_url': 'https://www.facebook.com/groups/ifistudenter',
-    'include_errors': True,
-
-    # Fetch parameters
-    'days_to_fetch': 1,
-    'num_of_posts': 10,
-}
 
 class FacebookGroupScraper(AsyncScraper):
     """
@@ -52,8 +35,24 @@ class FacebookGroupScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
-        if not IS_PRODUCTION_ENVIRONMENT and not SCRAPER_CONFIG['webhook_base_url']:
-            raise ValueError("NGROK_URL environment variable must be set in development mode")
+        super().__init__(source_id='facebook-post')
+        
+        # Scraper-specific configuration
+        self.scraper_config = {
+            # Webhook configuration
+            'webhook_endpoint': '/webhook/brightdata/facebook-group/results',
+            'webhook_format': 'json',
+            'webhook_uncompressed': True,
+
+            # Dataset configuration
+            'dataset_id': 'gd_lz11l67o2cb3r0lkj3',  # Facebook - Posts by group URL dataset
+            'group_url': 'https://www.facebook.com/groups/ifistudenter',
+            'include_errors': True,
+
+            # Fetch parameters
+            'days_to_fetch': 2,
+            'num_of_posts': 10,
+        }
             
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
@@ -67,18 +66,16 @@ class FacebookGroupScraper(AsyncScraper):
         
         # Calculate date range
         self.end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        self.start_date = self.end_date - timedelta(days=SCRAPER_CONFIG['days_to_fetch'] - 1)
+        self.start_date = self.end_date - timedelta(days=self.scraper_config['days_to_fetch'] - 1)
         
         # Format dates for API
         self.start_date_str = self.start_date.strftime('%Y-%m-%d')
         self.end_date_str = self.end_date.strftime('%Y-%m-%d')
     
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
+    def _get_webhook_url(self) -> str:
+        """Get the webhook URL at runtime."""
+        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else DEVELOPMENT_FORWARDED_URL
+        return f"{webhook_base_url}{self.scraper_config['webhook_endpoint']}"
     
     def _extract_post_id(self, url: str) -> Optional[str]:
         """Extract the post ID from a Facebook post URL."""
@@ -135,30 +132,30 @@ class FacebookGroupScraper(AsyncScraper):
             
             # Prepare request data
             data = [{
-                "url": SCRAPER_CONFIG['group_url'],
+                "url": self.scraper_config['group_url'],
                 "start_date": self.start_date_str,
                 "end_date": self.end_date_str,
-                "num_of_posts": SCRAPER_CONFIG['num_of_posts'],
+                "num_of_posts": self.scraper_config['num_of_posts'],
                 "posts_to_not_include": posts_to_exclude
             }]
             
-            logger.info(f"Scraping up to {SCRAPER_CONFIG['num_of_posts']} posts from {self.start_date_str} to {self.end_date_str}")
+            logger.info(f"Scraping up to {self.scraper_config['num_of_posts']} posts from {self.start_date_str} to {self.end_date_str}")
             if posts_to_exclude:
                 logger.info(f"Excluding {len(posts_to_exclude)} already processed posts")
             
             # Prepare request parameters
             params = {
-                "dataset_id": SCRAPER_CONFIG['dataset_id'],
-                "include_errors": str(SCRAPER_CONFIG['include_errors']).lower(),
+                "dataset_id": self.scraper_config['dataset_id'],
+                "include_errors": str(self.scraper_config['include_errors']).lower(),
             }
             
             # Add webhook configuration
-            webhook_url = f"{SCRAPER_CONFIG['webhook_base_url']}{SCRAPER_CONFIG['webhook_endpoint']}"
+            webhook_url = self._get_webhook_url()
             params.update({
                 "endpoint": webhook_url,
                 "auth_header": self.brightdata_config['webhook_auth'],
-                "format": SCRAPER_CONFIG['webhook_format'],
-                "uncompressed_webhook": str(SCRAPER_CONFIG['webhook_uncompressed']).lower(),
+                "format": self.scraper_config['webhook_format'],
+                "uncompressed_webhook": str(self.scraper_config['webhook_uncompressed']).lower(),
             })
             logger.info(f"Webhook configured to send results to: {webhook_url}")
             

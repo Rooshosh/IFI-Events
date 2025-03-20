@@ -10,21 +10,9 @@ from src.scrapers.base import AsyncScraper
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+from src.config.development import DEVELOPMENT_FORWARDED_URL
 
 logger = logging.getLogger(__name__)
-
-# Scraper-specific configuration
-SCRAPER_CONFIG = {
-    # Webhook configuration
-    'webhook_base_url': 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL'),
-    'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
-    'webhook_format': 'json',
-    'webhook_uncompressed': True,
-
-    # Dataset configuration
-    'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
-    'include_errors': True,
-}
 
 class FacebookEventScraper(AsyncScraper):
     """
@@ -44,8 +32,19 @@ class FacebookEventScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
-        if not IS_PRODUCTION_ENVIRONMENT and not SCRAPER_CONFIG['webhook_base_url']:
-            raise ValueError("NGROK_URL environment variable must be set in development mode")
+        super().__init__(source_id='facebook-event')
+        
+        # Scraper-specific configuration
+        self.scraper_config = {
+            # Webhook configuration
+            'webhook_endpoint': '/webhook/brightdata/facebook-events/results',
+            'webhook_format': 'json',
+            'webhook_uncompressed': True,
+
+            # Dataset configuration
+            'dataset_id': 'gd_m14sd0to1jz48ppm51',  # Facebook - Event by URL dataset
+            'include_errors': True,
+        }
             
         # Initialize BrightData configuration
         self.brightdata_config = get_brightdata_config()
@@ -57,12 +56,10 @@ class FacebookEventScraper(AsyncScraper):
             "Content-Type": self.brightdata_config['content_type'],
         }
     
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
+    def _get_webhook_url(self) -> str:
+        """Get the webhook URL at runtime."""
+        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else DEVELOPMENT_FORWARDED_URL
+        return f"{webhook_base_url}{self.scraper_config['webhook_endpoint']}"
     
     def _extract_event_id(self, url: str) -> Optional[str]:
         """Extract the event ID from a Facebook event URL."""
@@ -97,17 +94,17 @@ class FacebookEventScraper(AsyncScraper):
             
             # Prepare request parameters
             params = {
-                "dataset_id": SCRAPER_CONFIG['dataset_id'],
-                "include_errors": str(SCRAPER_CONFIG['include_errors']).lower(),
+                "dataset_id": self.scraper_config['dataset_id'],
+                "include_errors": str(self.scraper_config['include_errors']).lower(),
             }
             
             # Add webhook configuration
-            webhook_url = f"{SCRAPER_CONFIG['webhook_base_url']}{SCRAPER_CONFIG['webhook_endpoint']}"
+            webhook_url = self._get_webhook_url()
             params.update({
                 "endpoint": webhook_url,
                 "auth_header": self.brightdata_config['webhook_auth'],
-                "format": SCRAPER_CONFIG['webhook_format'],
-                "uncompressed_webhook": str(SCRAPER_CONFIG['webhook_uncompressed']).lower(),
+                "format": self.scraper_config['webhook_format'],
+                "uncompressed_webhook": str(self.scraper_config['webhook_uncompressed']).lower(),
             })
             logger.info(f"Webhook configured to send results to: {webhook_url}")
             

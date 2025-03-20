@@ -34,16 +34,10 @@ class NavetScraper(SyncScraper):
     
     def __init__(self):
         """Initialize the scraper with default settings"""
+        super().__init__(source_id='navet')
         self.base_url = self.BASE_URL
         self.headers = self.HEADERS.copy()
         self.fetch_details = self.FETCH_DETAILS
-    
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
     
     def _fetch_html(self, url: str) -> str:
         """Fetch HTML content from a URL"""

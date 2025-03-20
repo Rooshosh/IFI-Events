@@ -3,6 +3,7 @@
 from typing import List, Optional
 from abc import ABC, abstractmethod
 from ..models.event import Event
+from ..config.data_sources import get_source_display_name
 
 class BaseScraper(ABC):
     """
@@ -12,31 +13,31 @@ class BaseScraper(ABC):
     1. Fetching events from a specific source (e.g., peoply.app, ifinavet.no)
     2. Converting the source's event format into our Event model
     3. Handling its own configuration and authentication if needed
-    
-    Required Methods:
-        name(): Returns the scraper's identifier (e.g., 'peoply.app')
     """
     
-    @abstractmethod
+    def __init__(self, source_id: str):
+        """
+        Initialize the scraper with its source ID.
+        
+        Args:
+            source_id: The source identifier (e.g., 'facebook-post')
+        """
+        self.source_id = source_id
+
     def name(self) -> str:
         """
-        Return the name/identifier of this scraper.
-        This should match the name in the source configuration.
+        Return the display name of this scraper from the configuration.
         
         Returns:
-            str: The scraper's identifier (e.g., 'peoply.app', 'ifinavet.no')
+            str: The scraper's display name (e.g., 'Facebook Post')
+            
+        Raises:
+            ValueError: If no display name is found for this source ID
         """
-        pass
-
-    def get_source_name(self) -> Optional[str]:
-        """
-        Get the source name for this scraper from the data sources configuration.
-        
-        Returns:
-            Optional[str]: The source name if found in configuration, None otherwise
-        """
-        from src.config.data_sources import get_source_name_by_scraper
-        return get_source_name_by_scraper(self.__class__.__module__ + '.' + self.__class__.__name__)
+        display_name = get_source_display_name(self.source_id)
+        if not display_name:
+            raise ValueError(f"No display name found for source ID: {self.source_id}")
+        return display_name
 
 class SyncScraper(BaseScraper):
     """

@@ -10,10 +10,7 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from src.config.external_services.openai import (
-    OPENAI_CONFIG,
-    init_openai_client
-)
+from src.config.external_services.openai import OpenAIConfig, init_openai_client
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +51,13 @@ def is_event_post(
         content: The text content to analyze
         post_date: The original posting date of the content
         author: The author of the post
-        config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
+        config: Optional LLM configuration. If not provided, uses default config
     
     Returns:
         Tuple of (is_event: bool, explanation: str)
     """
     try:
-        config = config or OPENAI_CONFIG.copy()
+        config = config or OpenAIConfig().to_dict()
         openai = init_openai_client()
         
         # Prepare content with metadata
@@ -121,13 +118,13 @@ def parse_event_details(
         url: The URL of the post
         post_date: The original posting date of the content
         author: The author of the post
-        config: Optional LLM configuration. If not provided, uses OPENAI_CONFIG
+        config: Optional LLM configuration. If not provided, uses default config
     
     Returns:
         Dictionary with event details or None if parsing fails
     """
     try:
-        config = config or OPENAI_CONFIG.copy()
+        config = config or OpenAIConfig().to_dict()
         openai = init_openai_client()
         
         # Prepare content with metadata

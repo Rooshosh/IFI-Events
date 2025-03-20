@@ -1,24 +1,22 @@
-"""External services configuration.
-
-This package contains configuration for all external services used by the application.
-"""
+"""External service configurations."""
 
 from .brightdata import (
-    BRIGHTDATA_CONFIG,
+    BrightDataConfig,
     get_brightdata_config,
     verify_brightdata_auth
 )
+
 from .openai import (
-    OPENAI_CONFIG,
+    OpenAIConfig,
     get_openai_config,
     init_openai_client
 )
 
 __all__ = [
-    'BRIGHTDATA_CONFIG',
+    'BrightDataConfig',
     'get_brightdata_config',
     'verify_brightdata_auth',
-    'OPENAI_CONFIG',
+    'OpenAIConfig',
     'get_openai_config',
-    'init_openai_client',
+    'init_openai_client'
 ] 

@@ -11,13 +11,14 @@ from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 # DEFAULT_SNAPSHOT_ID = "s_m8dd8tjd2cdyc0ffeh" # 11 events 
-DEFAULT_SNAPSHOT_ID = "s_m8diu1qp1nqaku1jbd" # 9 events fetched at March 17. 9PM
+# DEFAULT_SNAPSHOT_ID = "s_m8diu1qp1nqaku1jbd" # 9 events fetched at March 17. 9PM
+DEFAULT_SNAPSHOT_ID = "s_m8fv7yphdl4vkduaa"
 
 def fetch_snapshot(snapshot_id: str) -> dict:
     """
@@ -47,10 +48,11 @@ def fetch_snapshot(snapshot_id: str) -> dict:
     data = response.json()
     logger.info(f"Successfully fetched {len(data)} events from snapshot")
     
-    # Log the first event to see its structure
-    if data:
-        logger.info("First event structure:")
-        logger.info(json.dumps(data[0], indent=2))
+    # Log each event's basic info
+    for event in data:
+        username = event.get('event_by', [{}])[0].get('name', 'Unknown')
+        url = event.get('url', 'No URL')
+        logger.info(f"Username: {username} - Event-url: {url}")
     
     return data
 
@@ -80,11 +82,6 @@ def format_data_for_webhook(data: list) -> dict:
     #     ]
     # }
     formatted_data = {"events": data}
-    
-    # Log the formatted data structure
-    logger.info("Formatted webhook data structure:")
-    logger.info(json.dumps(formatted_data, indent=2))
-    
     return formatted_data
 
 def simulate_webhook(snapshot_id: str):

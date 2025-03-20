@@ -16,12 +16,9 @@ from src.models.event import Event
 from src.models.raw_scrape_data import ScrapedPost
 from src.utils.llm import is_event_post, parse_event_details
 from src.scrapers.facebook_event import FacebookEventScraper
-from src.scrapers.facebook import FacebookGroupScraper
+from src.scrapers.facebook_post import FacebookGroupScraper
 from src.db import db, DatabaseError, with_retry
-
-# Configuration
-# TODO: Disable and/or remove this flag
-SKIP_LLM_INTERPRETATION = False  # If True, only process posts with Facebook Event links
+from src.config.data_sources import SOURCES, get_source_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +56,11 @@ def _store_scraped_posts(posts: List[Dict[str, Any]]) -> List[int]:
             
             # All entries will be committed in a single transaction
         
-        logger.info(f"Successfully stored {len(stored_ids)} posts in batch")
         return stored_ids
         
     except Exception as e:
-        logger.error(f"Failed to store batch: {str(e)}")
-        raise DatabaseError(f"Failed to store batch: {str(e)}") from e
+        logger.error(f"Failed to store raw data batch: {str(e)}")
+        raise DatabaseError(f"Failed to store raw data batch: {str(e)}") from e
 
 def _parse_post_date(date_str: str) -> Optional[datetime]:
     """
@@ -135,9 +131,8 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
         # Get URL (optional)
         post_url = post.get('url', '')
         
-        # Get source name from scraper
-        scraper = FacebookGroupScraper()
-        source_name = scraper.name()
+        # Get source name from configuration using standard method
+        source_name = get_source_display_name('facebook-post')
         
         # Create event
         event = Event(
@@ -158,8 +153,8 @@ def _create_event_from_post(post: Dict[str, Any], event_details: Dict[str, Any])
         return event
         
     except Exception as e:
-        logger.error(f"Error creating event from post: {e}")
-        raise
+        logger.error(f"Error creating event from post: {str(e)}", exc_info=True)
+        raise ValueError(f"Failed to create event from post: {str(e)}")
 
 def _has_facebook_event(post: Dict[str, Any]) -> bool:
     """
@@ -224,7 +219,6 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
     2. Split remaining posts into two lists based on whether they contain Facebook Event links
     3. Store posts with event links in the database
     4. Trigger a scrape for posts with Event links using FacebookEventScraper
-    5. Process non-Event posts with LLM if SKIP_LLM_INTERPRETATION is false
     6. Store posts processed by LLM with their determined event status
     7. Parse posts into Event objects
     
@@ -282,45 +276,13 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
         
         logger.info(f"Found {len(posts_with_event_links)} posts with Facebook Event links")
         
-        # Store posts with event links
-        posts_with_events_to_store = []
-        for post in posts_with_event_links:
-            post_url = post.get('url', '')
-            if post_url:
-                posts_with_events_to_store.append({
-                    'post_url': post_url,
-                    'event_status': 'contains-event',
-                    'scraped_at': processing_start_time
-                })
-        
-        if posts_with_events_to_store:
-            _store_scraped_posts(posts_with_events_to_store)
-        
-        # Extract event URLs from posts with events
-        event_urls = []
-        for post in posts_with_event_links:
-            event_urls.extend(_extract_facebook_event_links(post))
-        
-        # Remove duplicates while preserving order
-        event_urls = list(dict.fromkeys(event_urls))
-        
-        # Trigger event scraping if we found any event URLs
-        if event_urls:
-            logger.info(f"Triggering scrape for {len(event_urls)} Facebook Events")
-            scraper = FacebookEventScraper()
-            if not scraper.initialize_data_fetch(event_urls):
-                logger.error("Failed to trigger Facebook Event scraping")
-        
-        # If SKIP_LLM_INTERPRETATION is true, we're done here
-        if SKIP_LLM_INTERPRETATION:
-            logger.info("Skipping LLM interpretation of non-Event posts")
-            return []
-        
         # Process posts without Event links using LLM
+        logger.info(f"Analyzing {len(posts_without_event_links)} posts with LLM")
+
         events: List[Event] = []
         posts_without_event_links_to_store = []
         
-        for post in posts_without_event_links:
+        for i, post in enumerate(posts_without_event_links):
             try:
                 # Skip posts without content
                 if not post.get('content'):
@@ -357,6 +319,8 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
                                 events.append(event)
                         except ValueError as e:
                             logger.warning(f"Could not create event: {e}")
+                        
+                logger.info(f"--- Analyzed post {i+1} of {len(posts_without_event_links)}")
                     
             except Exception as e:
                 logger.error(f"Failed to process post: {e}")
@@ -365,9 +329,48 @@ def process_facebook_post_scrape_data(data: Dict[str, Any]) -> List[Event]:
         # Store posts processed by LLM
         if posts_without_event_links_to_store:
             _store_scraped_posts(posts_without_event_links_to_store)
-            logger.info(f"Stored {len(posts_without_event_links_to_store)} posts processed by LLM")
         
-        logger.info(f"Successfully processed {len(events)} events from {len(posts_without_event_links)} non-Event posts")
+        logger.info(f"Successfully identified {len(events)} events from {len(posts_without_event_links)} posts without direct event-links")
+        
+        # Log the results from llm analysis
+        logger.info(f"Extracted {len(events)} events from {len(data.get('posts', []))} posts")
+
+
+        # Handle posts with event links
+
+        # Store posts with event links
+        posts_with_event_links_to_store = []
+        for post in posts_with_event_links:
+            post_url = post.get('url', '')
+            if post_url:
+                posts_with_event_links_to_store.append({
+                    'post_url': post_url,
+                    'event_status': 'contains-event',
+                    'scraped_at': processing_start_time
+                })
+        
+        if posts_with_event_links_to_store:
+            _store_scraped_posts(posts_with_event_links_to_store)
+        
+        # Extract event URLs from posts with events
+        event_urls = []
+        for post in posts_with_event_links:
+            event_urls.extend(_extract_facebook_event_links(post))
+        
+        # Remove duplicates while preserving order
+        event_urls_unique = list(dict.fromkeys(event_urls))
+        logger.info(f"Removed {len(event_urls) - len(event_urls_unique)} duplicate Facebook Event URLs")
+
+        if event_urls:
+            logger.info(f"Found {len(event_urls_unique)} unique Facebook Event URLs")
+            
+        # Trigger event scraping if we found any event URLs
+        if event_urls_unique:
+            logger.info(f"Triggering scrape for {len(event_urls_unique)} unique Facebook Event links")
+            scraper = FacebookEventScraper()
+            if not scraper.initialize_data_fetch(event_urls_unique):
+                logger.error("Failed to trigger Facebook Event scraping")
+        
         return events
         
     except Exception as e:
