@@ -34,7 +34,7 @@ async def process_facebook_ifi_posts(data: dict):
         events = process_facebook_post_scrape_data(data)
         
         # Store any events found in the posts
-        new_count, updated_count = process_new_events(events, "Facebook (IFI-studenter)")
+        new_count, updated_count = process_new_events(events, "facebook-post")
         
         logger.info(f"Processed {len(events)} events from posts: {new_count} new, {updated_count} updated")
         

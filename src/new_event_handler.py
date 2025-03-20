@@ -12,14 +12,14 @@ from .utils.deduplication import (
     are_events_cross_source_duplicate
 )
 from sqlalchemy.orm import Session
-from .config.data_sources import compare_source_priorities
+from .config.data_sources import compare_source_priorities, get_source_display_name
 
 logger = logging.getLogger(__name__)
 
 @with_retry()
 def process_new_events(
     events: List[Event],
-    source_name: str,
+    source_id: str,
     skip_merging: bool = False
 ) -> Tuple[int, int]:
     """
@@ -29,7 +29,7 @@ def process_new_events(
     
     Args:
         events: List of events to process
-        source_name: Source of the events (for logging and duplicate checking)
+        source_id: Source ID of the events (e.g., 'facebook-post')
         skip_merging: If True, events will be inserted without duplicate checking
         
     Returns:
@@ -50,7 +50,7 @@ def process_new_events(
             for event in events:
                 # Set source name if not already set
                 if not event.source_name:
-                    event.source_name = source_name
+                    event.source_name = get_source_display_name(source_id)
                 
                 if skip_merging:
                     session.add(event)
@@ -76,6 +76,7 @@ def process_new_events(
                     logger.info(f"Added new event: {event.title}")
                     
                     # Check for duplicates from other sources
+                    # TODO: Re-enable this once we have a way to handle the duplicates
                     check_and_process_cross_source_duplicates(event, session)
             
             logger.info(f"Processed {len(events)} events: {new_count} new, {update_count} updated")
@@ -90,8 +91,11 @@ def check_and_process_cross_source_duplicates(new_event: Event, session: Session
     """
     Check for duplicates from other sources and process them.
     """
-    potential_duplicates = session.query(Event).filter(Event.id != new_event.id).all()
-    for existing_event in potential_duplicates:
+    potential_cross_source_duplicates = session.query(Event).filter(
+        Event.id != new_event.id,
+        Event.source_name != new_event.source_name
+    ).all()
+    for existing_event in potential_cross_source_duplicates:
         if are_events_cross_source_duplicate(new_event, existing_event):
             process_cross_source_duplicate(new_event, existing_event, session)
 
@@ -114,6 +118,21 @@ def process_cross_source_duplicate(event1: Event, event2: Event, session: Sessio
 def compare_source_priority(event1: Event, event2: Event) -> Tuple[Event, Event]:
     """
     Compare the priority of two event sources and return them in order of priority.
+    
+    Args:
+        event1: First event to compare
+        event2: Second event to compare
+        
+    Returns:
+        Tuple[Event, Event]: Events ordered by priority (higher priority first)
+        
+    Raises:
+        ValueError: If either event's source name is not found in the configuration
     """
-    comparison = compare_source_priorities(event1.source_name, event2.source_name)
+    # Get display names from source names
+    name1 = event1.source_name
+    name2 = event2.source_name
+    
+    # Compare priorities using display names
+    comparison = compare_source_priorities(name1, name2)
     return (event1, event2) if comparison >= 0 else (event2, event1) 

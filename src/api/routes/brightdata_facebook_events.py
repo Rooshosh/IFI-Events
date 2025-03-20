@@ -34,7 +34,7 @@ async def process_facebook_events(data: dict):
         events = parse_facebook_events(data)
         
         # Store any events found
-        new_count, updated_count = process_new_events(events, "Facebook Events")
+        new_count, updated_count = process_new_events(events, "facebook-event")
         
         logger.info(f"Processed {len(events)} events: {new_count} new, {updated_count} updated")
         

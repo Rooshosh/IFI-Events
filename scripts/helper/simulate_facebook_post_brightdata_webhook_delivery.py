@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # 41 records fetched at March 18. 5PM
 # DEFAULT_SNAPSHOT_ID = "s_m8elyzsd27djbuihzy"
 
-DEFAULT_SNAPSHOT_ID = "s_m8fra0bv100dx8394s"
+DEFAULT_SNAPSHOT_ID = "s_m8elyzsd27djbuihzy"
 
 def fetch_snapshot(snapshot_id: str) -> dict:
     """
@@ -58,10 +58,11 @@ def fetch_snapshot(snapshot_id: str) -> dict:
     data = response.json()
     logger.info(f"Successfully fetched {len(data)} posts from snapshot")
     
-    # Log the first post to see its structure
-    if data:
-        logger.info("First post structure:")
-        logger.info(json.dumps(data[0], indent=2))
+    # Log each post's basic info
+    for post in data:
+        username = post.get('user_username_raw', 'Unknown')
+        url = post.get('url', 'No URL')
+        logger.info(f"Username: {username} - Post-url: {url}")
     
     return data
 
@@ -109,11 +110,6 @@ def format_data_for_webhook(data: list) -> dict:
     #     ]
     # }
     formatted_data = {"posts": data}
-    
-    # Log the formatted data structure
-    logger.info("Formatted webhook data structure:")
-    logger.info(json.dumps(formatted_data, indent=2))
-    
     return formatted_data
 
 def simulate_webhook(snapshot_id: str):

@@ -27,16 +27,10 @@ class PeoplyScraper(SyncScraper):
     
     def __init__(self):
         """Initialize the scraper with default settings"""
+        super().__init__(source_id='peoply')
         self.base_url = self.BASE_URL
         self.headers = self.HEADERS.copy()
         self.events_limit = self.EVENTS_LIMIT
-    
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
     
     def _get_api_url(self) -> str:
         """Generate the URL for peoply.app events API with the current date"""

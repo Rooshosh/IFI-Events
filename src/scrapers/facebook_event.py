@@ -10,6 +10,7 @@ from src.scrapers.base import AsyncScraper
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+from src.config.development import DEVELOPMENT_FORWARDED_URL
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ class FacebookEventScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
+        super().__init__(source_id='facebook-event')
+        
         # Scraper-specific configuration
         self.scraper_config = {
             # Webhook configuration
@@ -55,17 +58,8 @@ class FacebookEventScraper(AsyncScraper):
     
     def _get_webhook_url(self) -> str:
         """Get the webhook URL at runtime."""
-        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL')
-        if not webhook_base_url and not IS_PRODUCTION_ENVIRONMENT:
-            raise ValueError("NGROK_URL environment variable must be set in development mode")
+        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else DEVELOPMENT_FORWARDED_URL
         return f"{webhook_base_url}{self.scraper_config['webhook_endpoint']}"
-    
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
     
     def _extract_event_id(self, url: str) -> Optional[str]:
         """Extract the event ID from a Facebook event URL."""

@@ -13,6 +13,7 @@ from src.models.raw_scrape_data import ScrapedPost
 from src.utils.timezone import now_oslo
 from src.config.external_services import get_brightdata_config
 from src.config.environment import IS_PRODUCTION_ENVIRONMENT
+from src.config.development import DEVELOPMENT_FORWARDED_URL
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class FacebookGroupScraper(AsyncScraper):
         Raises:
             ValueError: If required configuration values are missing or invalid
         """
+        super().__init__(source_id='facebook-post')
+        
         # Scraper-specific configuration
         self.scraper_config = {
             # Webhook configuration
@@ -47,7 +50,7 @@ class FacebookGroupScraper(AsyncScraper):
             'include_errors': True,
 
             # Fetch parameters
-            'days_to_fetch': 1,
+            'days_to_fetch': 2,
             'num_of_posts': 10,
         }
             
@@ -71,17 +74,8 @@ class FacebookGroupScraper(AsyncScraper):
     
     def _get_webhook_url(self) -> str:
         """Get the webhook URL at runtime."""
-        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else os.environ.get('NGROK_URL')
-        if not webhook_base_url and not IS_PRODUCTION_ENVIRONMENT:
-            raise ValueError("NGROK_URL environment variable must be set in development mode")
+        webhook_base_url = 'https://ifi-events-data-service.up.railway.app' if IS_PRODUCTION_ENVIRONMENT else DEVELOPMENT_FORWARDED_URL
         return f"{webhook_base_url}{self.scraper_config['webhook_endpoint']}"
-    
-    def name(self) -> str:
-        """Return the name of the scraper"""
-        source_name = self.get_source_name()
-        if not source_name:
-            raise ValueError(f"No source name found for scraper {self.__class__.__name__}")
-        return source_name
     
     def _extract_post_id(self, url: str) -> Optional[str]:
         """Extract the post ID from a Facebook post URL."""

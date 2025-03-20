@@ -16,7 +16,7 @@ import argparse
 from pathlib import Path
 
 # Add src to Python path when running directly
-sys.path.append(str(Path(__file__).parent.parent.parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from src.scrapers.facebook_post import FacebookGroupScraper
 from src.scrapers.navet import NavetScraper
@@ -118,7 +118,7 @@ def main():
     
     # Available scrapers
     scrapers = {
-        '1': ('Facebook Group Scraper', lambda: run_facebook_scraper(store_in_db, not args.no_details)),
+        '1': ('Facebook Group Post Scraper', lambda: run_facebook_scraper(store_in_db, not args.no_details)),
         '2': ('Navet Scraper', lambda: run_navet_scraper(store_in_db, not args.no_details)),
         '3': ('Peoply Scraper', lambda: run_peoply_scraper(store_in_db, not args.no_details))
     }
