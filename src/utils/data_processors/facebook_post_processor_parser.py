@@ -40,7 +40,6 @@ def _store_scraped_posts(posts: List[Dict[str, Any]]) -> List[int]:
     Raises:
         DatabaseError: If there is an error storing the data
     """
-    stored_ids = []
     
     try:
         with db.session() as session:
@@ -51,12 +50,6 @@ def _store_scraped_posts(posts: List[Dict[str, Any]]) -> List[int]:
                     scraped_at=post['scraped_at']
                 )
                 session.add(post_entry)
-                session.flush()  # Get the ID without committing
-                stored_ids.append(post_entry.id)
-            
-            # All entries will be committed in a single transaction
-        
-        return stored_ids
         
     except Exception as e:
         logger.error(f"Failed to store raw data batch: {str(e)}")
