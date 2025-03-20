@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Dict, Any
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, BigInteger
 
 from .base import Base
 from ..utils.timezone import ensure_oslo_timezone, now_oslo
@@ -24,7 +24,7 @@ class ScrapedPost(Base):
     __tablename__ = 'scraped_posts'
     
     # Required fields
-    id = Column(Integer, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     post_url = Column(String, nullable=False, unique=True)
     event_status = Column(String, nullable=False)
     scraped_at = Column(DateTime(timezone=True), default=now_oslo)

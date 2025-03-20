@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from sqlalchemy import Column, Integer, String, Text, DateTime, event, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, event, JSON, ForeignKey, BigInteger
 from sqlalchemy.orm import validates, relationship
 from sqlalchemy import event as sa_event
 import json
@@ -52,7 +52,7 @@ class Event(Base):
     __tablename__ = 'events'
     
     # Required fields
-    id = Column(Integer, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     title = Column(String, nullable=False)
     description = Column(Text)
     start_time = Column(DateTime(timezone=True), nullable=False)
