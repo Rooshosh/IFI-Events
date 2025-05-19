@@ -4,7 +4,7 @@
 
 A Python application that aggregates and displays events from various UiO IFI (Department of Informatics) sources.
 
-~~📋 Project Management Board - Moved to private~~
+~~📋 Project Management Board~~ - Moved to private
 
 ## Features
 
